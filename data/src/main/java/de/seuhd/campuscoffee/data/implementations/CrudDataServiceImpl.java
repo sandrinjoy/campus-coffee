@@ -4,14 +4,16 @@ import de.seuhd.campuscoffee.data.mapper.EntityMapper;
 import de.seuhd.campuscoffee.data.persistence.entities.Entity;
 import de.seuhd.campuscoffee.data.constraints.ConstraintMapping;
 import de.seuhd.campuscoffee.data.persistence.repositories.ResettableSequenceRepository;
-import de.seuhd.campuscoffee.data.constraints.ConstraintRetriever;
+import de.seuhd.campuscoffee.domain.exceptions.ConcurrentUpdateException;
 import de.seuhd.campuscoffee.domain.exceptions.DuplicationException;
 import de.seuhd.campuscoffee.domain.exceptions.NotFoundException;
 import de.seuhd.campuscoffee.domain.model.objects.DomainModel;
 import de.seuhd.campuscoffee.domain.ports.data.CrudDataService;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.exception.ConstraintViolationException;
 import org.jspecify.annotations.NonNull;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -54,13 +56,10 @@ public abstract class CrudDataServiceImpl<
      */
     protected final Class<DOMAIN> domainClass;
     /*
-     * The entity class type (used for constraint extraction).
+     * The entity's unique constraints, declared by the subclass. Each maps a database constraint name to the
+     * domain field it guards, so a uniqueness violation can be reported as a DuplicationException on that field.
      */
-    protected final Class<ENTITY> entityClass;
-    /*
-     * Constraint extractor for automatic unique field constraint discovery.
-     */
-    protected final ConstraintRetriever<DOMAIN, ENTITY> databaseConstraintExtractor;
+    protected final Set<ConstraintMapping<DOMAIN>> uniqueConstraints;
 
     @Override
     public void clear() {
@@ -99,10 +98,6 @@ public abstract class CrudDataServiceImpl<
     @Override
     @NonNull
     public DOMAIN upsert(@NonNull DOMAIN domain) {
-        // extract constraints automatically from entity annotations
-        Set<ConstraintMapping<DOMAIN>> fieldConstraints =
-                databaseConstraintExtractor.extractConstraintsFromEntity(entityClass);
-
         try {
             ID id = domain.getId();
 
@@ -122,15 +117,21 @@ public abstract class CrudDataServiceImpl<
             mapper.updateEntity(domain, entity);
 
             return mapper.fromEntity(repository.saveAndFlush(entity));
+        } catch (OptimisticLockingFailureException e) {
+            // the row changed between the read above and this write; surface it as a domain conflict
+            throw new ConcurrentUpdateException(domainClass, domain.getId());
         } catch (DataIntegrityViolationException e) {
-            // Check each registered constraint to see if it was violated
-            for (var fieldConstraint : fieldConstraints) {
-                if (isConstraintViolation(e, fieldConstraint.constraintName())) {
-                    Object fieldValue = fieldConstraint.extractValue(domain);
-                    throw new DuplicationException(domainClass, fieldConstraint.columnName(), String.valueOf(fieldValue));
+            // the database reports which named constraint was violated; map it to the declared domain field
+            String violated = constraintNameOf(e);
+            if (violated != null) {
+                for (ConstraintMapping<DOMAIN> constraint : uniqueConstraints) {
+                    if (violated.equalsIgnoreCase(constraint.constraintName())) {
+                        throw new DuplicationException(domainClass, constraint.columnName(),
+                                String.valueOf(constraint.extractValue(domain)));
+                    }
                 }
             }
-            // if no constraint matched, re-throw the original exception
+            // no declared unique constraint matched (e.g. a CHECK or foreign-key violation) -> rethrow the original exception
             throw e;
         }
     }
@@ -165,29 +166,20 @@ public abstract class CrudDataServiceImpl<
     }
 
     /**
-     * Checks if the exception is due to a specific constraint violation.
-     * Checks both the exception message and root cause for the constraint name.
+     * Returns the name of the database constraint reported by a data-integrity violation, or {@code null}
+     * when the cause chain contains no Hibernate {@link ConstraintViolationException}. Reading the name the
+     * driver reported avoids matching on database-specific error-message text.
      *
-     * @param exception              the DataIntegrityViolationException to check
-     * @param constraintName the database constraint name to look for
-     * @return true if the exception is due to the specified constraint violation
+     * @param exception the data-integrity violation to inspect
+     * @return the violated constraint name, or null if none is reported
      */
-    // package-private so CrudDataServiceImplTest can drive the message- and root-cause-matching branches
-    // directly with crafted exceptions, which a black-box test cannot distinguish
-    static boolean isConstraintViolation(DataIntegrityViolationException exception, String constraintName) {
-        // check the exception message for the constraint name
-        String message = exception.getMessage();
-        if (message != null && message.contains(constraintName)) {
-            return true;
+    // package-private (not private) so it can be unit-tested directly with a crafted exception
+    static String constraintNameOf(DataIntegrityViolationException exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException violation) {
+                return violation.getConstraintName();
+            }
         }
-
-        // also check root-cause for constraint violations
-        Throwable cause = exception.getRootCause();
-        if (cause != null) {
-            String causeMessage = cause.getMessage();
-            return causeMessage != null && causeMessage.contains(constraintName);
-        }
-
-        return false;
+        return null;
     }
 }

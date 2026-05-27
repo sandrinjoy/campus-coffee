@@ -3,12 +3,14 @@ package de.seuhd.campuscoffee.data.implementations;
 import de.seuhd.campuscoffee.data.mapper.UserEntityMapper;
 import de.seuhd.campuscoffee.data.persistence.entities.UserEntity;
 import de.seuhd.campuscoffee.data.persistence.repositories.UserRepository;
-import de.seuhd.campuscoffee.data.constraints.ConstraintRetriever;
+import de.seuhd.campuscoffee.data.constraints.ConstraintMapping;
 import de.seuhd.campuscoffee.domain.exceptions.NotFoundException;
 import de.seuhd.campuscoffee.domain.model.objects.User;
 import de.seuhd.campuscoffee.domain.ports.data.UserDataService;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
+
+import java.util.Set;
 
 /**
  * Implementation of the user data service that the domain layer provides as a port.
@@ -21,15 +23,17 @@ class UserDataServiceImpl
         extends CrudDataServiceImpl<User, UserEntity, UserRepository, Long>
         implements UserDataService {
 
+    /** Unique constraints on login name and email, used to report a duplicate as a {@code DuplicationException}. */
+    private static final Set<ConstraintMapping<User>> UNIQUE_CONSTRAINTS = Set.of(
+            new ConstraintMapping<User>(User::loginName, UserEntity.LOGIN_NAME_COLUMN, UserEntity.LOGIN_NAME_UNIQUE_CONSTRAINT),
+            new ConstraintMapping<User>(User::emailAddress, UserEntity.EMAIL_ADDRESS_COLUMN, UserEntity.EMAIL_ADDRESS_UNIQUE_CONSTRAINT));
+
     /**
-     * Constructor that initializes the base CRUD service with User-specific dependencies.
-     *
-     * @param repository    the User repository for data access
-     * @param entityMapper  the mapper for converting between User domain objects and entities
-     * @param constraintExtractor the constraint retriever for automatic constraint discovery
+     * @param repository   the User repository for data access
+     * @param entityMapper the mapper for converting between User domain objects and entities
      */
-    UserDataServiceImpl(UserRepository repository, UserEntityMapper entityMapper, ConstraintRetriever<User, UserEntity> constraintExtractor) {
-        super(repository, entityMapper, User.class, UserEntity.class, constraintExtractor);
+    UserDataServiceImpl(UserRepository repository, UserEntityMapper entityMapper) {
+        super(repository, entityMapper, User.class, UNIQUE_CONSTRAINTS);
     }
 
     /**

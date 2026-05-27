@@ -1,52 +1,35 @@
 package de.seuhd.campuscoffee.data.implementations;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link CrudDataServiceImpl#isConstraintViolation}, which decides whether a database
- * integrity violation refers to a named constraint. The constraint name can surface either in the
- * exception's own message or only in its root cause, so both detection paths are driven directly here;
- * a black-box test that only triggers a real violation cannot tell the two paths apart.
+ * Unit tests for {@link CrudDataServiceImpl#constraintNameOf}, which reads the violated constraint name from
+ * the data-integrity violation's Hibernate cause rather than matching on database-specific message text.
  */
 class CrudDataServiceImplTest {
 
-    private static final String CONSTRAINT = "uq_pos_name";
-
     @Test
-    void detectsConstraintNamedInTheExceptionMessage() {
+    void readsConstraintNameFromHibernateCause() {
+        String reportedName = "some_unique_constraint";
+        ConstraintViolationException hibernateViolation = mock(ConstraintViolationException.class);
+        when(hibernateViolation.getConstraintName()).thenReturn(reportedName);
         DataIntegrityViolationException exception =
-                new DataIntegrityViolationException("duplicate key value violates unique constraint " + CONSTRAINT);
+                new DataIntegrityViolationException("could not execute statement", hibernateViolation);
 
-        assertThat(CrudDataServiceImpl.isConstraintViolation(exception, CONSTRAINT)).isTrue();
+        assertThat(CrudDataServiceImpl.constraintNameOf(exception)).isEqualTo(reportedName);
     }
 
     @Test
-    void detectsConstraintNamedOnlyInTheRootCause() {
-        // the top-level message does not contain the constraint name; only the deepest cause does, so this
-        // exercises the root-cause branch rather than the message branch
+    void returnsNullWhenNoHibernateConstraintViolationInChain() {
         DataIntegrityViolationException exception = new DataIntegrityViolationException(
-                "could not execute statement",
-                new RuntimeException("SQL error", new RuntimeException("violates constraint " + CONSTRAINT)));
-
-        assertThat(exception.getMessage()).doesNotContain(CONSTRAINT); // guard: the message branch must miss
-        assertThat(CrudDataServiceImpl.isConstraintViolation(exception, CONSTRAINT)).isTrue();
-    }
-
-    @Test
-    void returnsFalseWhenNeitherMessageNorRootCauseNamesTheConstraint() {
-        DataIntegrityViolationException withUnrelatedCause = new DataIntegrityViolationException(
                 "could not execute statement", new RuntimeException("some unrelated database error"));
 
-        assertThat(CrudDataServiceImpl.isConstraintViolation(withUnrelatedCause, CONSTRAINT)).isFalse();
-    }
-
-    @Test
-    void returnsFalseWhenThereIsNoCauseAndTheMessageDoesNotMatch() {
-        DataIntegrityViolationException withoutCause = new DataIntegrityViolationException("generic failure");
-
-        assertThat(CrudDataServiceImpl.isConstraintViolation(withoutCause, CONSTRAINT)).isFalse();
+        assertThat(CrudDataServiceImpl.constraintNameOf(exception)).isNull();
     }
 }

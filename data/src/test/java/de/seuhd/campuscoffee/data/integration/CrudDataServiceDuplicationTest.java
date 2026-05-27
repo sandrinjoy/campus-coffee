@@ -14,8 +14,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Verifies that the data service turns a database uniqueness violation into a domain
- * {@link DuplicationException}, covering the constraint discovery and mapping in
- * {@link de.seuhd.campuscoffee.data.implementations.CrudDataServiceImpl}.
+ * {@link DuplicationException} by mapping the violated named constraint to its domain field in
+ * {@link de.seuhd.campuscoffee.data.implementations.CrudDataServiceImpl}, and propagates other
+ * integrity violations unchanged.
  */
 class CrudDataServiceDuplicationTest extends AbstractDataIntegrationTest {
 

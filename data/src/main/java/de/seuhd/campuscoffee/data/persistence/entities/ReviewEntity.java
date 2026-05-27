@@ -28,4 +28,9 @@ public class ReviewEntity extends Entity {
 
     @Column(name = "approved")
     private Boolean approved;
+
+    /** Optimistic-locking version; prevents a lost update when the same review is approved concurrently. */
+    @Version
+    @Column(name = "version")
+    private Long version;
 }

@@ -13,9 +13,14 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 public interface ReviewEntityMapper extends EntityMapper<Review, ReviewEntity> {
 
     @Override
+    @Mapping(target = "version", ignore = true)
+    ReviewEntity toEntity(Review source);
+
+    @Override
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "version", ignore = true)
     @Mapping(target = "approvalCount", defaultValue = "0")
     void updateEntity(Review source, @MappingTarget ReviewEntity target);
 }

@@ -54,19 +54,19 @@ public class TestFixtures {
                     .street("Hauptstraße").houseNumber("90").postalCode(69117).city("Heidelberg")
                     .build(),
             Pos.builder()
-                    .id(1L).createdAt(DATE_TIME).updatedAt(DATE_TIME)
+                    .id(2L).createdAt(DATE_TIME).updatedAt(DATE_TIME)
                     .name("Bäcker Görtz ").description("Walking distance to lecture hall")
                     .type(PosType.BAKERY).campus(CampusType.INF)
                     .street("Berliner Str.").houseNumber("43").postalCode(69120).city("Heidelberg")
                     .build(),
             Pos.builder()
-                    .id(1L).createdAt(DATE_TIME).updatedAt(DATE_TIME)
+                    .id(3L).createdAt(DATE_TIME).updatedAt(DATE_TIME)
                     .name("Café Botanik").description("Outdoor seating available")
                     .type(PosType.CAFETERIA).campus(CampusType.INF)
                     .street("Im Neuenheimer Feld").houseNumber("304").postalCode(69120).city("Heidelberg")
                     .build(),
             Pos.builder()
-                    .id(1L).createdAt(DATE_TIME).updatedAt(DATE_TIME)
+                    .id(4L).createdAt(DATE_TIME).updatedAt(DATE_TIME)
                     .name("New Vending Machine").description("Use only in case of emergencies")
                     .type(PosType.VENDING_MACHINE).campus(CampusType.BERGHEIM)
                     .street("Teststraße").houseNumber("99a").postalCode(12345).city("Other City")
@@ -130,7 +130,7 @@ public class TestFixtures {
                 .toList();
     }
 
-    public static List<Review> getReviewFeaturesForInsertion() {
+    public static List<Review> getReviewFixturesForInsertion() {
         return getReviewFixtures().stream()
                 .map(review -> review.toBuilder().id(null).createdAt(null).updatedAt(null).build())
                 .toList();
@@ -149,7 +149,7 @@ public class TestFixtures {
     }
 
     public static List<Review> createReviewFixtures(ReviewService reviewService) {
-        return getReviewFeaturesForInsertion().stream()
+        return getReviewFixturesForInsertion().stream()
                 .map(reviewService::upsert)
                 .collect(Collectors.toList());
     }

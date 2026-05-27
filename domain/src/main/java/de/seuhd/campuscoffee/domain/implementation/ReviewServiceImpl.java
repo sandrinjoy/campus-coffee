@@ -56,7 +56,7 @@ public class ReviewServiceImpl extends CrudServiceImpl<Review, Long> implements 
         // on update the filter would match the review being updated, so skip the check
         if (review.getId() == null && !reviewDataService.filter(pos, review.author()).isEmpty()) {
             throw new ValidationException("Author with ID '" + review.author().getId()
-                    + " has already reviewed POS with ID '" + pos.getId() + "'.");
+                    + "' has already reviewed POS with ID '" + pos.getId() + "'.");
         }
 
         return super.upsert(review);
@@ -70,29 +70,29 @@ public class ReviewServiceImpl extends CrudServiceImpl<Review, Long> implements 
 
     @Override
     @Transactional
-    public @NonNull Review approve(@NonNull Review review, @NonNull Long userId) {
+    public @NonNull Review approve(@NonNull Long reviewId, @NonNull Long userId) {
         log.info("Processing approval request for review with ID '{}' by user with ID '{}'...",
-                review.getId(), userId);
+                reviewId, userId);
 
         // validate that the user exists
         User user = userDataService.getById(userId);
         Objects.requireNonNull(user.getId());
 
         // validate that the review exists
-        Objects.requireNonNull(review.getId());
-        Review reviewToApprove = reviewDataService.getById(review.getId());
+        Review reviewToApprove = reviewDataService.getById(reviewId);
         Objects.requireNonNull(reviewToApprove.author().getId());
 
         // a user cannot approve their own review
         if (reviewToApprove.author().getId().equals(user.getId())) {
             log.warn("User with ID '{}' attempted to approve their own review with ID '{}'.",
-                    user.getId(), review.getId());
+                    user.getId(), reviewId);
             throw new ValidationException("User with ID '" + user.getId()
-                    + "' cannot approve their own review with ID '" + review.getId() + "'.");
+                    + "' cannot approve their own review with ID '" + reviewId + "'.");
         }
 
-        // increment approval count
-        Review approvedReview = review.toBuilder().approvalCount(reviewToApprove.approvalCount() + 1).build();
+        // increment approval count on the freshly fetched review
+        Review approvedReview = reviewToApprove.toBuilder()
+                .approvalCount(reviewToApprove.approvalCount() + 1).build();
 
         // update approval status to determine if the review now reaches the approval quorum
         Review finalReview = updateApprovalStatus(approvedReview);

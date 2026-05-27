@@ -1,6 +1,5 @@
 package de.seuhd.campuscoffee.data.implementations;
 
-import de.seuhd.campuscoffee.data.constraints.ConstraintRetriever;
 import de.seuhd.campuscoffee.data.mapper.PosEntityMapper;
 import de.seuhd.campuscoffee.data.mapper.ReviewEntityMapper;
 import de.seuhd.campuscoffee.data.mapper.UserEntityMapper;
@@ -14,6 +13,7 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class ReviewDataServiceImpl
@@ -23,10 +23,10 @@ public class ReviewDataServiceImpl
     private final PosEntityMapper posEntityMapper;
     private final UserEntityMapper userEntityMapper;
 
+    // reviews have no unique constraints, so no constraint mappings are declared
     ReviewDataServiceImpl(ReviewRepository repository, ReviewEntityMapper entityMapper,
-                          ConstraintRetriever<Review, ReviewEntity> constraintRetriever,
                           PosEntityMapper posEntityMapper, UserEntityMapper userEntityMapper) {
-        super(repository, entityMapper, Review.class, ReviewEntity.class, constraintRetriever);
+        super(repository, entityMapper, Review.class, Set.of());
         this.posEntityMapper = posEntityMapper;
         this.userEntityMapper = userEntityMapper;
     }

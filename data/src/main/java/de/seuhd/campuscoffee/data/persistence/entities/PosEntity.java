@@ -1,6 +1,5 @@
 package de.seuhd.campuscoffee.data.persistence.entities;
 
-import de.seuhd.campuscoffee.data.constraints.DomainField;
 import de.seuhd.campuscoffee.domain.model.enums.CampusType;
 import de.seuhd.campuscoffee.domain.model.enums.PosType;
 import jakarta.persistence.*;
@@ -19,8 +18,12 @@ import lombok.Setter;
 @AllArgsConstructor
 @Table(name = "pos")
 public class PosEntity extends Entity {
-    @Column(unique = true)
-    @DomainField("name")
+    public static final String NAME_COLUMN = "name";
+
+    /** Name of the unique constraint on {@code name}, declared in the Flyway migration. */
+    public static final String NAME_UNIQUE_CONSTRAINT = "uq_pos_name";
+
+    @Column(name = NAME_COLUMN)
     private String name;
 
     private String description;

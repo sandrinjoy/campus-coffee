@@ -29,11 +29,11 @@ public interface ReviewService extends CrudService<Review, Long> {
     /**
      * Approves a review on behalf of a user.
      * The approval count is incremented, and the review may be marked as approved
-     * if the approval threshold is reached.
+     * if the approval threshold is reached. The updated review is persisted and returned.
      *
-     * @param review    the review to approve
+     * @param reviewId  unique identifier of the review to approve
      * @param userId    unique identifier of the user approving the review
-     * @return the updated review with incremented approval count
+     * @return the persisted review with the incremented approval count and updated approval status
      */
-    @NonNull Review approve(@NonNull Review review, @NonNull Long userId);
+    @NonNull Review approve(@NonNull Long reviewId, @NonNull Long userId);
 }

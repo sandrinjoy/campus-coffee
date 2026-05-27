@@ -1,6 +1,5 @@
 package de.seuhd.campuscoffee.data.persistence.entities;
 
-import de.seuhd.campuscoffee.data.constraints.DomainField;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -20,12 +19,14 @@ public class UserEntity extends Entity {
     public static final String LOGIN_NAME_COLUMN = "login_name";
     public static final String EMAIL_ADDRESS_COLUMN = "email_address";
 
-    @Column(name = LOGIN_NAME_COLUMN, unique = true)
-    @DomainField("loginName")
+    /** Names of the unique constraints, declared in the Flyway migration. */
+    public static final String LOGIN_NAME_UNIQUE_CONSTRAINT = "uq_users_login_name";
+    public static final String EMAIL_ADDRESS_UNIQUE_CONSTRAINT = "uq_users_email_address";
+
+    @Column(name = LOGIN_NAME_COLUMN)
     private String loginName;
 
-    @Column(name = EMAIL_ADDRESS_COLUMN, unique = true)
-    @DomainField("emailAddress")
+    @Column(name = EMAIL_ADDRESS_COLUMN)
     private String emailAddress;
 
     @Column(name = "first_name")

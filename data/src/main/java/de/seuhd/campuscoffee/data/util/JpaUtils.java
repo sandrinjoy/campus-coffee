@@ -1,9 +1,6 @@
 package de.seuhd.campuscoffee.data.util;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Table;
-
-import java.lang.reflect.Field;
 
 /**
  * Utility class for JPA-related functionality.
@@ -26,28 +23,5 @@ public class JpaUtils {
         }
 
         return tableName;
-    }
-
-    /**
-     * Checks if a field has @Column(unique=true).
-     */
-    public static boolean isUniqueField(Field field) {
-        if (!field.isAnnotationPresent(Column.class)) {
-            return false;
-        }
-        Column column = field.getAnnotation(Column.class);
-        return column.unique();
-    }
-
-    /**
-     * Extracts the column name from the @Column annotation.
-     */
-    public static String extractColumnName(Field field) {
-        Column column = field.getAnnotation(Column.class);
-        if (column != null && !column.name().isEmpty()) {
-            return column.name();
-        }
-        // fallback: use field name if no column name specified
-        return field.getName();
     }
 }

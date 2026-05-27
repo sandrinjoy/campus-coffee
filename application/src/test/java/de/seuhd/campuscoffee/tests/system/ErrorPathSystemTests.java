@@ -4,6 +4,7 @@ import de.seuhd.campuscoffee.api.dtos.PosDto;
 import de.seuhd.campuscoffee.api.dtos.ReviewDto;
 import de.seuhd.campuscoffee.api.dtos.UserDto;
 import de.seuhd.campuscoffee.domain.tests.TestFixtures;
+import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
@@ -12,6 +13,7 @@ import java.util.List;
 import static de.seuhd.campuscoffee.tests.SystemTestUtils.Requests.posRequests;
 import static de.seuhd.campuscoffee.tests.SystemTestUtils.Requests.reviewRequests;
 import static de.seuhd.campuscoffee.tests.SystemTestUtils.Requests.userRequests;
+import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -83,9 +85,17 @@ public class ErrorPathSystemTests extends AbstractSysTest {
         PosDto invalid = posDtoMapper.fromDomain(TestFixtures.getPosFixturesForInsertion().getFirst())
                 .toBuilder().city("").build();
 
-        int statusCode = posRequests.createAndReturnStatusCodes(List.of(invalid)).getFirst();
+        // the validation handler names the rejected field in the message; assert the name, not the exact text
+        String message = given()
+                .contentType(ContentType.JSON)
+                .body(invalid)
+                .when()
+                .post("/api/pos")
+                .then()
+                .statusCode(HttpStatus.BAD_REQUEST.value())
+                .extract().jsonPath().getString("message");
 
-        assertThat(statusCode).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(message).contains("city");
     }
 
     @Test

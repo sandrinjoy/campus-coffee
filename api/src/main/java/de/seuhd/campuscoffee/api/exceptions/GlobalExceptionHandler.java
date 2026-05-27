@@ -1,5 +1,6 @@
 package de.seuhd.campuscoffee.api.exceptions;
 
+import de.seuhd.campuscoffee.domain.exceptions.ConcurrentUpdateException;
 import de.seuhd.campuscoffee.domain.exceptions.DuplicationException;
 import de.seuhd.campuscoffee.domain.exceptions.NotFoundException;
 import de.seuhd.campuscoffee.domain.exceptions.MissingFieldException;
@@ -16,6 +17,7 @@ import org.springframework.web.context.request.WebRequest;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Global exception handler for all controllers.
@@ -31,10 +33,10 @@ public class GlobalExceptionHandler {
     private static final Map<Class<? extends Exception>, ExceptionConfig> EXCEPTION_MAPPINGS = Map.of(
             NotFoundException.class, new ExceptionConfig(HttpStatus.NOT_FOUND, "Resource not found: {}"),
             DuplicationException.class, new ExceptionConfig(HttpStatus.CONFLICT, "Duplicate resource: {}"),
+            ConcurrentUpdateException.class, new ExceptionConfig(HttpStatus.CONFLICT, "Concurrent modification: {}"),
             IllegalArgumentException.class, new ExceptionConfig(HttpStatus.BAD_REQUEST, "Bad request: {}"),
             MissingFieldException.class, new ExceptionConfig(HttpStatus.BAD_REQUEST, "Bad request: {}"),
-            ValidationException.class, new ExceptionConfig(HttpStatus.BAD_REQUEST, "Domain validation failed: {}"),
-            MethodArgumentNotValidException.class, new ExceptionConfig(HttpStatus.BAD_REQUEST, "Domain validation failed: {}")
+            ValidationException.class, new ExceptionConfig(HttpStatus.BAD_REQUEST, "Domain validation failed: {}")
     );
 
     /**
@@ -48,10 +50,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({
             NotFoundException.class,
             DuplicationException.class,
+            ConcurrentUpdateException.class,
             IllegalArgumentException.class,
             MissingFieldException.class,
-            ValidationException.class,
-            MethodArgumentNotValidException.class
+            ValidationException.class
     })
     public ResponseEntity<ErrorResponse> handleMappedException(
             Exception exception,
@@ -65,6 +67,26 @@ public class GlobalExceptionHandler {
             // fallback to generic handler
             return handleGenericException(exception, request);
         }
+    }
+
+    /**
+     * Handles bean validation failures on request bodies, building the message from the field-level
+     * binding errors.
+     *
+     * @param exception the validation exception raised when a request body fails bean validation
+     * @param request the web request
+     * @return ResponseEntity with ErrorResponse and HTTP 400
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidationException(
+            MethodArgumentNotValidException exception,
+            WebRequest request
+    ) {
+        String message = exception.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getField() + " " + error.getDefaultMessage())
+                .collect(Collectors.joining("; "));
+        log.warn("Domain validation failed: {}", message);
+        return buildErrorResponse(exception, HttpStatus.BAD_REQUEST, request, message);
     }
 
     /**

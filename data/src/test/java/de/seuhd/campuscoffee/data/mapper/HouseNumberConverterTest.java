@@ -25,8 +25,9 @@ class HouseNumberConverterTest {
                 arguments("21a", 21, 'a', "21a"),
                 arguments("100", 100, null, "100"),
                 arguments("5", 5, null, "5"),
-                // the suffix is the first non-digit character, so the "a" after the hyphen is dropped on merge
-                arguments("21-a", 21, '-', "21-")
+                // the letter is the suffix; separators are dropped, so "21-a" and "21 a" normalize to "21a"
+                arguments("21-a", 21, 'a', "21a"),
+                arguments("21 a", 21, 'a', "21a")
         );
     }
 

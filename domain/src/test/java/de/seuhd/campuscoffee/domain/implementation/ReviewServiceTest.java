@@ -67,7 +67,7 @@ public class ReviewServiceTest {
         when(reviewDataService.getById(review.id())).thenReturn(review);
 
         // when, then
-        assertThrows(ValidationException.class, () -> reviewService.approve(review, review.author().getId()));
+        assertThrows(ValidationException.class, () -> reviewService.approve(review.getId(), review.author().getId()));
         verify(userDataService).getById(review.author().id());
         verify(reviewDataService).getById(review.getId());
     }
@@ -95,7 +95,7 @@ public class ReviewServiceTest {
         );
 
         // when
-        Review approvedReview = reviewService.approve(review, user.getId());
+        Review approvedReview = reviewService.approve(review.getId(), user.getId());
 
         // then
         verify(userDataService).getById(user.getId());
@@ -158,7 +158,7 @@ public class ReviewServiceTest {
     @Test
     void userCannotCreateMoreThanOneReviewPerPos() {
         // given a new review (id is null), since the duplicate check runs only on creation
-        Review review = TestFixtures.getReviewFeaturesForInsertion().getFirst();
+        Review review = TestFixtures.getReviewFixturesForInsertion().getFirst();
         Pos pos = review.pos();
         User author = review.author();
         assertNotNull(pos.getId());
@@ -222,7 +222,7 @@ public class ReviewServiceTest {
         );
 
         // when
-        Review approvedReview = reviewService.approve(review, user.getId());
+        Review approvedReview = reviewService.approve(review.getId(), user.getId());
 
         // then
         verify(userDataService).getById(user.getId());
@@ -240,7 +240,7 @@ public class ReviewServiceTest {
     @Test
     void reviewCreationSuccessfulForExistingPosAndAuthorWithoutPreviousReview() {
         // given
-        Review review = TestFixtures.getReviewFeaturesForInsertion().getFirst();
+        Review review = TestFixtures.getReviewFixturesForInsertion().getFirst();
         Pos pos = review.pos();
         assertNotNull(pos.getId());
 

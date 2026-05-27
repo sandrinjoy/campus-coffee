@@ -15,8 +15,9 @@ public class HouseNumberConverter {
     }
 
     /**
-     * Splits a house number string into its numeric part and optional suffix character. The suffix is
-     * the first non-digit character, so "21-a" yields the suffix '-'.
+     * Splits a house number string into its numeric part and optional letter suffix. The suffix is the
+     * letter (e.g. the 'a' in "21a", "21 a", or "21-a"); separators such as spaces and hyphens are not
+     * part of the suffix and are not retained.
      *
      * @param houseNumber the house number string; may be null or empty
      * @return the parts, both null when the input is null or empty
@@ -31,8 +32,8 @@ public class HouseNumberConverter {
             throw new IllegalArgumentException(
                     "Invalid house number '" + houseNumber + "': must contain at least one digit.");
         }
-        String nonDigits = houseNumber.replaceAll("[0-9]", "");
-        Character suffix = nonDigits.isEmpty() ? null : nonDigits.charAt(0);
+        String letters = houseNumber.replaceAll("[^a-zA-Z]", "");
+        Character suffix = letters.isEmpty() ? null : letters.charAt(0);
         return new Parts(Integer.parseInt(digits), suffix);
     }
 

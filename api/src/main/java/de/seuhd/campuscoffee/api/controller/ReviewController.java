@@ -115,10 +115,7 @@ public class ReviewController extends CrudController<Review, ReviewDto, Long> {
             @RequestParam("user_id") Long userId) { // with is a workaround since we do not cover authentication and authorization in this lecture.
         return ResponseEntity.ok(
                 reviewDtoMapper.fromDomain(
-                        reviewService.approve(
-                                reviewService.getById(id),
-                                userId
-                        )
+                        reviewService.approve(id, userId)
                 )
         );
     }
