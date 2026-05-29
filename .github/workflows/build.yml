@@ -2,7 +2,7 @@ name: Build CampusCoffee
 
 on:
   push:
-    branches: [ "main", "feature/**" ]
+    branches: [ "**" ] # every branch
 
   pull_request:
     branches: [ "main" ]
@@ -18,7 +18,7 @@ jobs:
 
       - uses: jdx/mise-action@v3
 
-      # `build` runs `check`, which includes the coverage module's aggregate report and gate.
+      # `gradle build` runs `check`: ktlint, detekt, the tests, and the coverage aggregate report and gate.
       - name: Build with Gradle
         run: gradle build
 
