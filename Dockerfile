@@ -7,7 +7,7 @@ RUN mvn clean package -DskipTests
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
 RUN mkdir /opt/app
-COPY --from=build /app/application/target/application-0.0.5.jar /opt/app
+COPY --from=build /app/application/target/application.jar /opt/app
 WORKDIR /opt/app
-ENTRYPOINT ["java", "-jar", "application-0.0.5.jar"]
+ENTRYPOINT ["java", "-jar", "application.jar"]
 EXPOSE 8080

@@ -116,6 +116,9 @@
     </dependencies>
 
     <build>
+        <!-- Version-independent artifact name so the Dockerfile can reference application.jar
+             instead of a version-coupled application-<version>.jar. -->
+        <finalName>application</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
