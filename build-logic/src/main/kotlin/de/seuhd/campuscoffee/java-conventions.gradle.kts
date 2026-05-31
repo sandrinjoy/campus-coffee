@@ -14,7 +14,8 @@ plugins {
 val libs = the<VersionCatalogsExtension>().named("libs")
 
 group = "de.seuhd.campuscoffee"
-version = "0.0.5"
+// 0.1.x line for the Gradle/Kotlin migration, distinct from the 0.0.x Maven/Java line on main.
+version = "0.1.0"
 
 // Align the Kotlin stdlib/reflect with the Kotlin plugin version (Boot 4 manages an older stdlib;
 // the plugin needs >= 2.3 for jvmTarget 25).
