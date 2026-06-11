@@ -1,6 +1,7 @@
 package de.seuhd.campuscoffee.domain.implementation
 
 import de.seuhd.campuscoffee.domain.configuration.ApprovalConfiguration
+import de.seuhd.campuscoffee.domain.exceptions.DuplicationException
 import de.seuhd.campuscoffee.domain.exceptions.ValidationException
 import de.seuhd.campuscoffee.domain.model.objects.Review
 import de.seuhd.campuscoffee.domain.model.objects.persistedId
@@ -31,16 +32,40 @@ class ReviewServiceImpl(
         // validate that the POS exists before creating or updating the review
         val pos = posDataService.getById(domainObject.pos.persistedId)
 
-        // on creation, validate that this is the author's first review for this POS;
-        // on update the filter would match the review being updated, so skip the check
+        val reviewToUpsert =
+            domainObject.id?.let { id ->
+                // loading the existing review first makes an update of a missing review a 404
+                val existingReview = reviewDataService.getById(id)
+
+                // a review's POS and author are fixed at creation: re-pointing it would bypass the
+                // one-review-per-author-per-POS rule and carry approvals to a POS nobody approved
+                // for, and changing the author could mark a review as approved by its own author
+                if (existingReview.pos.id != pos.id || existingReview.author.id != domainObject.author.id) {
+                    throw ValidationException(
+                        "The POS and author of review with ID '$id' cannot be changed."
+                    )
+                }
+
+                // approvals are managed by the approval workflow (see approve); an update keeps the
+                // existing approval state instead of accepting it from the caller
+                domainObject.copy(
+                    approvalCount = existingReview.approvalCount,
+                    approved = existingReview.approved
+                )
+            } ?: domainObject
+
+        // an author may review a POS only once (updates cannot change the pair, so only creation can
+        // violate the rule); the uq_reviews_pos_author database constraint is the authoritative guard
+        // that also closes the concurrent-create race, reported with the same 409 as this check
         if (domainObject.id == null && reviewDataService.filter(pos, domainObject.author).isNotEmpty()) {
-            throw ValidationException(
-                "Author with ID '${domainObject.author.id}'" +
-                    " has already reviewed POS with ID '${pos.id}'."
+            throw DuplicationException(
+                Review::class.java,
+                "pos_id/author_id",
+                "POS ${pos.id}, author ${domainObject.author.id}"
             )
         }
 
-        return super.upsert(domainObject)
+        return super.upsert(reviewToUpsert)
     }
 
     @Transactional(readOnly = true)
@@ -49,6 +74,10 @@ class ReviewServiceImpl(
         approved: Boolean
     ): List<Review> = reviewDataService.filter(posDataService.getById(posId), approved)
 
+    // TODO(auth): once authentication/authorization exist, record who approved (a review_approvals
+    //  table with a unique (review_id, user_id) constraint) so a user can approve a review at most
+    //  once -- an anonymous count cannot enforce that, and the client-asserted userId parameter
+    //  below must come from the authenticated principal instead. See README "Approve reviews".
     @Transactional
     override fun approve(
         reviewId: Long,
@@ -116,7 +145,7 @@ class ReviewServiceImpl(
     /**
      * Determines whether a review meets the minimum approval threshold.
      */
-    private fun isApproved(review: Review): Boolean = review.approvalCount >= approvalConfiguration.minCount!!
+    private fun isApproved(review: Review): Boolean = review.approvalCount >= approvalConfiguration.minCount
 
     private companion object {
         private val log = LoggerFactory.getLogger(ReviewServiceImpl::class.java)

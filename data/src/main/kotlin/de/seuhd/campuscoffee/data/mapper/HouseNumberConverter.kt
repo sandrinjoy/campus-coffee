@@ -20,7 +20,7 @@ class HouseNumberConverter {
      * "21 a", or "21-a"; separators are not retained).
      *
      * @return the parts, both null when the input is null or empty
-     * @throws IllegalArgumentException if the input contains no digit
+     * @throws IllegalArgumentException if the input contains no digit or its numeric part exceeds Int range
      */
     fun split(houseNumber: String?): Parts {
         if (houseNumber.isNullOrEmpty()) {
@@ -30,9 +30,15 @@ class HouseNumberConverter {
         require(digits.isNotEmpty()) {
             "Invalid house number '$houseNumber': must contain at least one digit."
         }
+        // toIntOrNull instead of toInt: the domain pattern does not bound the digit count, so an
+        // oversized numeral must fail here as a validation error, not a NumberFormatException
+        val number =
+            requireNotNull(digits.toIntOrNull()) {
+                "Invalid house number '$houseNumber': numeric part is too large."
+            }
         val letters = houseNumber.replace(Regex("[^a-zA-Z]"), "")
         val suffix = if (letters.isEmpty()) null else letters[0]
-        return Parts(digits.toInt(), suffix)
+        return Parts(number, suffix)
     }
 
     /**

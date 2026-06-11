@@ -30,8 +30,10 @@ abstract class ReviewDtoMapper : DtoMapper<Review, ReviewDto> {
     abstract override fun fromDomain(source: Review): ReviewDto
 
     /**
-     * Builds a domain review from the DTO, resolving the referenced POS and author by id. A new review
-     * always starts unapproved with a zero approval count; the DTO's `approved` value is ignored.
+     * Builds a domain review from the DTO, resolving the referenced POS and author by id. The DTO's
+     * `approved` value is ignored: a new review starts unapproved with a zero approval count, and on an
+     * update the service restores the persisted approval state (approvals are owned by the approval
+     * workflow, never by the client).
      */
     override fun toDomain(source: ReviewDto): Review =
         Review(

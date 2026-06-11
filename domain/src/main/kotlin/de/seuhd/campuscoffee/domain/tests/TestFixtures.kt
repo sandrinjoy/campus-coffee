@@ -62,20 +62,20 @@ object TestFixtures {
                 campus = CampusType.ALTSTADT,
                 street = "Hauptstraße",
                 houseNumber = "90",
-                postalCode = 69117,
+                postalCode = "69117",
                 city = "Heidelberg"
             ),
             Pos(
                 id = 2L,
                 createdAt = DATE_TIME,
                 updatedAt = DATE_TIME,
-                name = "Bäcker Görtz ",
+                name = "Bäcker Görtz",
                 description = "Walking distance to lecture hall",
                 type = PosType.BAKERY,
                 campus = CampusType.INF,
                 street = "Berliner Str.",
                 houseNumber = "43",
-                postalCode = 69120,
+                postalCode = "69120",
                 city = "Heidelberg"
             ),
             Pos(
@@ -88,7 +88,7 @@ object TestFixtures {
                 campus = CampusType.INF,
                 street = "Im Neuenheimer Feld",
                 houseNumber = "304",
-                postalCode = 69120,
+                postalCode = "69120",
                 city = "Heidelberg"
             ),
             Pos(
@@ -101,7 +101,7 @@ object TestFixtures {
                 campus = CampusType.BERGHEIM,
                 street = "Teststraße",
                 houseNumber = "99a",
-                postalCode = 12345,
+                postalCode = "12345",
                 city = "Other City"
             )
         )

@@ -5,6 +5,7 @@ import de.seuhd.campuscoffee.data.mapper.EntityMapper
 import de.seuhd.campuscoffee.data.persistence.entities.Entity
 import de.seuhd.campuscoffee.data.persistence.repositories.ResettableSequenceRepository
 import de.seuhd.campuscoffee.domain.exceptions.ConcurrentUpdateException
+import de.seuhd.campuscoffee.domain.exceptions.DeletionConflictException
 import de.seuhd.campuscoffee.domain.exceptions.DuplicationException
 import de.seuhd.campuscoffee.domain.exceptions.NotFoundException
 import de.seuhd.campuscoffee.domain.model.objects.DomainModel
@@ -14,6 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.repository.findByIdOrNull
+import org.springframework.transaction.annotation.Transactional
 
 /**
  * Base implementation of CRUD data service operations, providing common functionality reused across
@@ -88,11 +90,25 @@ abstract class CrudDataServiceImpl<DOMAIN : DomainModel<ID>, ENTITY : Entity, RE
         }
     }
 
+    /**
+     * Deletes by id, translating a foreign-key violation (other data still references the entity) into
+     * a [DeletionConflictException]. The explicit flush surfaces the violation inside this method, and
+     * thus inside the catch, instead of at the transaction commit.
+     *
+     * @throws NotFoundException if no entity with the given id exists
+     * @throws DeletionConflictException if other data still references the entity
+     */
+    @Transactional
     override fun delete(id: ID) {
         if (!repository.existsById(id)) {
             throw NotFoundException(domainClass, id)
         }
-        repository.deleteById(id)
+        try {
+            repository.deleteById(id)
+            repository.flush()
+        } catch (e: DataIntegrityViolationException) {
+            throw DeletionConflictException(domainClass, id, e)
+        }
     }
 
     /**

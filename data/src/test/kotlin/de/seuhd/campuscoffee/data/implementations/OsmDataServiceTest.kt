@@ -1,6 +1,7 @@
 package de.seuhd.campuscoffee.data.implementations
 
 import de.seuhd.campuscoffee.data.client.OsmClient
+import de.seuhd.campuscoffee.domain.exceptions.ExternalServiceException
 import de.seuhd.campuscoffee.domain.exceptions.MissingFieldException
 import de.seuhd.campuscoffee.domain.exceptions.NotFoundException
 import de.seuhd.campuscoffee.domain.model.enums.OsmAmenity
@@ -18,11 +19,18 @@ import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.whenever
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
+import org.springframework.web.client.HttpClientErrorException
+import org.springframework.web.client.HttpServerErrorException
+import org.springframework.web.client.ResourceAccessException
+import java.io.IOException
 import java.util.stream.Stream
 
 /**
  * Tests how [OsmDataServiceImpl] parses the OSM XML response: required tags, amenity resolution, the
- * name fallback, and the failure paths for empty responses and unsupported or missing tags.
+ * name fallback, and the failure paths — a missing node is a [NotFoundException], while transport
+ * errors, server errors, and malformed responses are [ExternalServiceException]s.
  */
 @ExtendWith(MockitoExtension::class)
 class OsmDataServiceTest {
@@ -55,10 +63,11 @@ class OsmDataServiceTest {
 
     @ParameterizedTest
     @NullAndEmptySource
-    fun `fetchNode throws NotFoundException for an empty or null response`(response: String?) {
+    fun `fetchNode throws ExternalServiceException for an empty or null response`(response: String?) {
+        // a 2xx without a body is a malformed OSM response, not a missing node (that would be a 404)
         whenever(osmClient.fetchNode(NODE_ID)).thenReturn(response)
 
-        assertThatThrownBy { service.fetchNode(NODE_ID) }.isInstanceOf(NotFoundException::class.java)
+        assertThatThrownBy { service.fetchNode(NODE_ID) }.isInstanceOf(ExternalServiceException::class.java)
     }
 
     @ParameterizedTest
@@ -81,19 +90,63 @@ class OsmDataServiceTest {
     }
 
     @Test
-    fun `fetchNode throws NotFoundException when the response has no node element`() {
+    fun `fetchNode throws ExternalServiceException when the response has no node element`() {
         whenever(osmClient.fetchNode(NODE_ID)).thenReturn("<osm></osm>")
+
+        assertThatThrownBy { service.fetchNode(NODE_ID) }.isInstanceOf(ExternalServiceException::class.java)
+    }
+
+    @Test
+    fun `fetchNode throws ExternalServiceException when the node has no id`() {
+        whenever(osmClient.fetchNode(NODE_ID)).thenReturn(
+            "<osm>\n  <node>\n    <tag k=\"amenity\" v=\"cafe\"/>\n    <tag k=\"name\" v=\"X\"/>\n  </node>\n</osm>\n"
+        )
+
+        assertThatThrownBy { service.fetchNode(NODE_ID) }.isInstanceOf(ExternalServiceException::class.java)
+    }
+
+    @Test
+    fun `fetchNode throws ExternalServiceException for unparseable XML`() {
+        whenever(osmClient.fetchNode(NODE_ID)).thenReturn("this is not XML")
+
+        assertThatThrownBy { service.fetchNode(NODE_ID) }.isInstanceOf(ExternalServiceException::class.java)
+    }
+
+    @Test
+    fun `fetchNode throws NotFoundException when the OSM API answers 404 Not Found`() {
+        whenever(osmClient.fetchNode(NODE_ID)).thenThrow(httpClientError(HttpStatus.NOT_FOUND))
 
         assertThatThrownBy { service.fetchNode(NODE_ID) }.isInstanceOf(NotFoundException::class.java)
     }
 
     @Test
-    fun `fetchNode throws NotFoundException when the node has no id`() {
-        whenever(osmClient.fetchNode(NODE_ID)).thenReturn(
-            "<osm>\n  <node>\n    <tag k=\"amenity\" v=\"cafe\"/>\n    <tag k=\"name\" v=\"X\"/>\n  </node>\n</osm>\n"
-        )
+    fun `fetchNode throws NotFoundException when the OSM API answers 410 Gone for a deleted node`() {
+        whenever(osmClient.fetchNode(NODE_ID)).thenThrow(httpClientError(HttpStatus.GONE))
 
         assertThatThrownBy { service.fetchNode(NODE_ID) }.isInstanceOf(NotFoundException::class.java)
+    }
+
+    @Test
+    fun `fetchNode throws ExternalServiceException when the OSM API answers with a server error`() {
+        whenever(osmClient.fetchNode(NODE_ID)).thenThrow(
+            HttpServerErrorException.create(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Service Unavailable",
+                HttpHeaders.EMPTY,
+                ByteArray(0),
+                null
+            )
+        )
+
+        assertThatThrownBy { service.fetchNode(NODE_ID) }.isInstanceOf(ExternalServiceException::class.java)
+    }
+
+    @Test
+    fun `fetchNode throws ExternalServiceException for a transport error such as a timeout`() {
+        whenever(osmClient.fetchNode(NODE_ID))
+            .thenThrow(ResourceAccessException("I/O error", IOException("connection timed out")))
+
+        assertThatThrownBy { service.fetchNode(NODE_ID) }.isInstanceOf(ExternalServiceException::class.java)
     }
 
     @Test
@@ -146,6 +199,9 @@ class OsmDataServiceTest {
             }
             append("  </node>\n</osm>\n")
         }
+
+    private fun httpClientError(status: HttpStatus): HttpClientErrorException =
+        HttpClientErrorException.create(status, status.reasonPhrase, HttpHeaders.EMPTY, ByteArray(0), null)
 
     companion object {
         private const val NODE_ID = 123L

@@ -33,7 +33,8 @@ enum class Operation(
             CrudResponseSpecification(HttpStatus.CREATED, "The new %s as a JSON object."),
             CrudResponseSpecification(
                 HttpStatus.BAD_REQUEST,
-                "Validation failed (e.g., bean validation error).",
+                "Validation failed (e.g., bean validation error, or the request body carries an ID — " +
+                    "IDs are assigned by the server).",
                 isErrorResponse = true
             ),
             CrudResponseSpecification(
@@ -72,6 +73,11 @@ enum class Operation(
                 HttpStatus.NOT_FOUND,
                 "No %s with the provided ID could be found.",
                 isErrorResponse = true
+            ),
+            CrudResponseSpecification(
+                HttpStatus.CONFLICT,
+                "The %s cannot be deleted because other data still references it.",
+                isErrorResponse = true
             )
         )
     ),
@@ -104,6 +110,17 @@ enum class Operation(
             CrudResponseSpecification(
                 HttpStatus.NOT_FOUND,
                 "The external %s could not be found.",
+                isErrorResponse = true,
+                isExternalResource = true
+            ),
+            CrudResponseSpecification(
+                HttpStatus.CONFLICT,
+                "A %s with the same value for a unique field already exists.",
+                isErrorResponse = true
+            ),
+            CrudResponseSpecification(
+                HttpStatus.BAD_GATEWAY,
+                "The external service providing the %s could not be reached or failed.",
                 isErrorResponse = true,
                 isExternalResource = true
             )

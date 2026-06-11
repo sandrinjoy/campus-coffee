@@ -21,6 +21,8 @@ data class UserDto(
     val loginName: String?,
     @field:NotNull
     @field:Email
+    // @Email alone admits addresses longer than the 254-character column, which would surface as a 500
+    @field:Size(max = 254, message = "Email address must be at most 254 characters long.")
     val emailAddress: String?,
     @field:NotNull
     @field:Size(min = 1, max = 255, message = "First name must be between 1 and 255 characters long.")

@@ -106,6 +106,7 @@ class PosController(
         @RequestParam("campus_type") campusType: CampusType
     ): ResponseEntity<PosDto> {
         val createdPos = posDtoMapper.fromDomain(posService.importFromOsmNode(nodeId, campusType))
-        return ResponseEntity.created(getLocation(createdPos.persistedId)).body(createdPos)
+        // the current request is the import URL, so the location must be built from the collection path
+        return ResponseEntity.created(getLocation("/pos", createdPos.persistedId)).body(createdPos)
     }
 }

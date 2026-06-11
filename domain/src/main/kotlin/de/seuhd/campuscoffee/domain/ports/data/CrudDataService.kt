@@ -1,5 +1,6 @@
 package de.seuhd.campuscoffee.domain.ports.data
 
+import de.seuhd.campuscoffee.domain.exceptions.DeletionConflictException
 import de.seuhd.campuscoffee.domain.exceptions.NotFoundException
 import de.seuhd.campuscoffee.domain.model.objects.DomainModel
 
@@ -51,6 +52,7 @@ interface CrudDataService<DOMAIN : DomainModel<ID>, ID> {
      *
      * @param id the unique identifier of the entity to delete
      * @throws NotFoundException if no entity exists with the given ID
+     * @throws DeletionConflictException if other data still references the entity
      */
     fun delete(id: ID)
 }

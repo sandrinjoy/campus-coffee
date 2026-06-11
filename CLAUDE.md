@@ -44,7 +44,7 @@ The codebase uses extensive generics to reduce duplication:
 - **CrudDataService** / **CrudDataServiceImpl**: Generic data service interface and implementation.
 - **DtoMapper** / **EntityMapper**: Generic mapping interfaces using MapStruct.
 
-Domain-specific controllers/services extend these base classes (e.g., `PosController extends CrudController<PosDto, Pos, Long>`).
+Domain-specific controllers/services extend these base classes (e.g., `PosController extends CrudController<Pos, PosDto, Long>`; the domain type comes first).
 
 ## Build and Run Commands
 
@@ -105,16 +105,17 @@ All tests:
 gradle test
 ```
 
-Single test class:
+Single test class (scope the task to the module that contains the test; the bare `test` task runs in
+every module, and the `--tests` filter fails the modules that have no matching test):
 
 ```shell
-gradle test --tests PosServiceTest
+gradle :domain:test --tests "PosServiceTest"
 ```
 
-Single test method:
+Single test method (test methods use backtick sentence names; quote the filter):
 
 ```shell
-gradle test --tests "PosServiceTest.testMethodName"
+gradle :domain:test --tests "PosServiceTest.getById returns the POS from the data service"
 ```
 
 ### Code Coverage and Mutation Testing
@@ -125,7 +126,7 @@ gradle test --tests "PosServiceTest.testMethodName"
   `domain`/`api`/`data` are largely covered by the `application` system and acceptance tests, not by
   their own tests. `gradle build` (or `gradle check`) builds the report and enforces the gate: the
   `coverageGate` task (a `JacocoCoverageVerification` in `coverage/build.gradle.kts`, wired into `check`)
-  fails the build when aggregated line or branch coverage is below its minimums (90% line, 80% branch).
+  fails the build when aggregated line or branch coverage is below its minimums (95% line, 82% branch).
   The minimums track current coverage; raise them when adding tests, never lower them to make a build pass.
 - **Mutation testing (PITest)**: opt-in and local via the `-Pmutation` property and the per-module
   `pitest` task (e.g., `gradle :domain:pitest -Pmutation`). Each module runs PIT against its own tests and
@@ -223,10 +224,13 @@ private helpers) keep conventional camelCase names.
 ### Error Handling
 
 Domain exceptions in `domain/src/main/kotlin/de/seuhd/campuscoffee/domain/exceptions/`:
-- `NotFoundException`: Entity not found.
-- `DuplicationException`: Duplicate unique fields.
-- `ValidationException`: Business rule violation.
-- `MissingFieldException`: Required field missing.
+- `NotFoundException`: Entity not found (404).
+- `DuplicationException`: Duplicate unique fields (409).
+- `ValidationException`: Business rule violation (400).
+- `MissingFieldException`: Required field missing (400).
+- `ConcurrentUpdateException`: Optimistic-locking conflict (409).
+- `DeletionConflictException`: Deletion blocked because other data references the entity (409).
+- `ExternalServiceException`: An external service (e.g., OpenStreetMap) failed or was unreachable (502).
 
 Global exception handler: `api/src/main/kotlin/de/seuhd/campuscoffee/api/exceptions/GlobalExceptionHandler.kt`.
 It extends `ResponseEntityExceptionHandler`, so the standard Spring MVC exceptions also map to their
@@ -256,7 +260,9 @@ Custom OpenAPI annotations in `api/src/main/kotlin/de/seuhd/campuscoffee/api/ope
 - Dev profile activates on `spring.config.activate.on-profile: dev`.
 - Custom properties:
   - `osm.api.base-url`: OpenStreetMap API endpoint.
+  - `osm.api.connect-timeout` / `osm.api.read-timeout`: HTTP timeouts of the OSM client (defaults: 5s/10s).
   - `campus-coffee.approval.min-count`: Minimum number of approvals needed for reviews to be approved.
+    Required and must be >= 1; binding fails at startup otherwise.
 
 ## REST API Endpoints
 
@@ -287,7 +293,16 @@ Base URL: `http://localhost:8080/api`.
 - `GET /reviews/{id}` - Get review by ID.
 - `GET /reviews/filter?pos_id={id}&approved={true/false}` - Filter reviews.
 - `POST /reviews` - Create review.
-- `PUT /reviews/{id}/approve` - Approve review (requires different user than author).
+- `PUT /reviews/{id}/approve?user_id={id}` - Approve review (the approving user must differ from the author).
+
+Notes on semantics:
+- `POST` rejects a request body that carries an `id` (400); the server assigns ids.
+- `PUT /reviews/{id}` may change the review text; the POS and author of a review are fixed at creation
+  (changing them returns 400), and the approval state (`approvalCount`/`approved`) is owned by the
+  approval workflow, so an update keeps it.
+- Creating a second review for the same POS by the same author returns 409 (`DuplicationException`,
+  backed by the `uq_reviews_pos_author` database constraint, which also closes the concurrent-create race).
+- `DELETE /pos/{id}` and `DELETE /users/{id}` return 409 when reviews still reference the entity.
 
 ## Working with the Codebase
 
@@ -300,10 +315,10 @@ Base URL: `http://localhost:8080/api`.
 5. Create JPA entity in `data/src/main/kotlin/de/seuhd/campuscoffee/data/persistence/entities/`.
 6. Create repository in `data/src/main/kotlin/de/seuhd/campuscoffee/data/persistence/repositories/` (extend `JpaRepository`).
 7. Create entity mapper in `data/src/main/kotlin/de/seuhd/campuscoffee/data/mapper/` (extend `EntityMapper`).
-8. Create data service implementation in `data/src/main/kotlin/de/seuhd/campuscoffee/data/implementations/` (extend `CrudDataServiceImpl<DOMAIN, ENTITY, RESPOSITORY, ID>`).
+8. Create data service implementation in `data/src/main/kotlin/de/seuhd/campuscoffee/data/implementations/` (extend `CrudDataServiceImpl<DOMAIN, ENTITY, REPOSITORY, ID>`).
 9. Create DTO in `api/src/main/kotlin/de/seuhd/campuscoffee/api/dtos/` (extend `Dto<ID>`).
 10. Create DTO mapper in `api/src/main/kotlin/de/seuhd/campuscoffee/api/mapper/` (extend `DtoMapper<DOMAIN, DTO>`).
-11. Create controller in `api/src/main/kotlin/de/seuhd/campuscoffee/api/controller/` (extend `CrudController<DTO, DOMAIN, ID>`). Map paths relative to the resource (e.g., `@RequestMapping("/widgets")`); the `/api` base is applied centrally by `ApiPathConfig`.
+11. Create controller in `api/src/main/kotlin/de/seuhd/campuscoffee/api/controller/` (extend `CrudController<DOMAIN, DTO, ID>`). Map paths relative to the resource (e.g., `@RequestMapping("/widgets")`); the `/api` base is applied centrally by `ApiPathConfig`.
 12. Create Flyway migration in `data/src/main/resources/db/migration/`.
 
 ### Constraint Violations

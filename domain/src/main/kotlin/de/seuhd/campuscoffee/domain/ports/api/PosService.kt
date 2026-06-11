@@ -1,8 +1,10 @@
 package de.seuhd.campuscoffee.domain.ports.api
 
 import de.seuhd.campuscoffee.domain.exceptions.DuplicationException
+import de.seuhd.campuscoffee.domain.exceptions.ExternalServiceException
 import de.seuhd.campuscoffee.domain.exceptions.MissingFieldException
 import de.seuhd.campuscoffee.domain.exceptions.NotFoundException
+import de.seuhd.campuscoffee.domain.exceptions.ValidationException
 import de.seuhd.campuscoffee.domain.model.enums.CampusType
 import de.seuhd.campuscoffee.domain.model.objects.Pos
 import de.seuhd.campuscoffee.domain.ports.data.OsmDataService
@@ -30,13 +32,16 @@ interface PosService : CrudService<Pos, Long> {
     /**
      * Imports a Point of Sale from an OpenStreetMap node.
      * Fetches POS data from OpenStreetMap using the [OsmDataService], converts it to a POS entity,
-     * and saves it to the system. If a POS with the same name already exists, it is updated.
+     * and saves it as a new POS. Re-importing a node whose name matches an existing POS is rejected;
+     * there is no update-by-import.
      *
      * @param nodeId     the OpenStreetMap node ID to import
      * @param campusType the campus type to assign to the imported POS
-     * @return the created or updated POS
-     * @throws NotFoundException if the OSM node with the given ID does not exist or cannot be fetched
+     * @return the created POS
+     * @throws NotFoundException if the OSM node with the given ID does not exist
+     * @throws ExternalServiceException if the OpenStreetMap API cannot be reached or fails
      * @throws MissingFieldException if the OSM node lacks required fields for creating a valid POS
+     * @throws ValidationException if the OSM node's house number or postal code is invalid
      * @throws DuplicationException if a POS with the same name already exists
      */
     fun importFromOsmNode(

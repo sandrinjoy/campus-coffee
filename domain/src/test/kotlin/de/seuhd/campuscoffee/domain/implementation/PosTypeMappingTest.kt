@@ -1,6 +1,6 @@
 package de.seuhd.campuscoffee.domain.implementation
 
-import de.seuhd.campuscoffee.domain.exceptions.MissingFieldException
+import de.seuhd.campuscoffee.domain.exceptions.ValidationException
 import de.seuhd.campuscoffee.domain.model.enums.CampusType
 import de.seuhd.campuscoffee.domain.model.enums.OsmAmenity
 import de.seuhd.campuscoffee.domain.model.enums.PosType
@@ -25,7 +25,7 @@ import java.util.stream.Stream
 
 /**
  * Tests how [PosServiceImpl.importFromOsmNode] resolves the resulting [PosType] from an OSM amenity,
- * and how it reports an unparsable postcode.
+ * and how it reports an invalid postcode.
  */
 @ExtendWith(MockitoExtension::class)
 class PosTypeMappingTest {
@@ -70,16 +70,16 @@ class PosTypeMappingTest {
         assertThat(imported.street).isEqualTo(node.street)
         assertThat(imported.houseNumber).isEqualTo(node.houseNumber)
         assertThat(imported.city).isEqualTo(node.city)
-        assertThat(imported.postalCode).isEqualTo(node.postcode.toInt())
+        assertThat(imported.postalCode).isEqualTo(node.postcode)
         assertThat(imported.campus).isEqualTo(CampusType.INF)
     }
 
     @Test
-    fun `importFromOsmNode throws MissingFieldException for an unparsable postcode`() {
-        whenever(osmDataService.fetchNode(NODE_ID)).thenReturn(nodeWith(OsmAmenity.CAFE, "not-a-number"))
+    fun `importFromOsmNode throws ValidationException for an invalid postcode`() {
+        whenever(osmDataService.fetchNode(NODE_ID)).thenReturn(nodeWith(OsmAmenity.CAFE, "not-a-postcode"))
 
         assertThatThrownBy { posService.importFromOsmNode(NODE_ID, CampusType.INF) }
-            .isInstanceOf(MissingFieldException::class.java)
+            .isInstanceOf(ValidationException::class.java)
     }
 
     private fun nodeWith(

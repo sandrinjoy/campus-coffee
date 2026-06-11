@@ -51,8 +51,62 @@ class OsmImportSystemTests : AbstractSystemTest() {
 
         assertThat(imported.name).isEqualTo("Campus Cafe")
         assertThat(imported.type).isEqualTo(PosType.CAFE)
-        assertThat(imported.postalCode).isEqualTo(69117)
+        assertThat(imported.postalCode).isEqualTo("69117")
         assertThat(imported.city).isEqualTo("Heidelberg")
+        // the location must point at the created POS resource, not at the import URL
+        assertThat(result.responseHeaders.location.toString()).endsWith("/api/pos/${imported.id}")
+    }
+
+    @Test
+    fun `importing the same OSM node twice returns 409 Conflict`() {
+        wireMock.stubFor(
+            get(urlEqualTo("/node/$NODE_ID")).willReturn(
+                aResponse()
+                    .withStatus(HttpStatus.OK.value())
+                    .withHeader("Content-Type", "application/xml")
+                    .withBody(osmXml(NODE_ID, validTags()))
+            )
+        )
+
+        val firstStatus =
+            client()
+                .post()
+                .uri("/api/pos/import/osm/{nodeId}?campus_type={campus}", NODE_ID, "INF")
+                .exchange()
+                .returnResult<ByteArray>()
+                .status
+                .value()
+        assertThat(firstStatus).isEqualTo(HttpStatus.CREATED.value())
+
+        // the second import hits the unique POS name; there is no update-by-import
+        val secondStatus =
+            client()
+                .post()
+                .uri("/api/pos/import/osm/{nodeId}?campus_type={campus}", NODE_ID, "INF")
+                .exchange()
+                .returnResult<ByteArray>()
+                .status
+                .value()
+        assertThat(secondStatus).isEqualTo(HttpStatus.CONFLICT.value())
+    }
+
+    @Test
+    fun `importing while the OSM API fails returns 502 Bad Gateway instead of 404`() {
+        wireMock.stubFor(
+            get(urlEqualTo("/node/$NODE_ID"))
+                .willReturn(aResponse().withStatus(HttpStatus.SERVICE_UNAVAILABLE.value()))
+        )
+
+        val status =
+            client()
+                .post()
+                .uri("/api/pos/import/osm/{nodeId}?campus_type={campus}", NODE_ID, "INF")
+                .exchange()
+                .returnResult<ByteArray>()
+                .status
+                .value()
+
+        assertThat(status).isEqualTo(HttpStatus.BAD_GATEWAY.value())
     }
 
     @Test

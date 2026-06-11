@@ -10,8 +10,12 @@ services:
       - campus-coffee-net
     ports:
       - '8080:8080'
+    # wait until Postgres accepts connections: the app runs Flyway at startup and exits permanently
+    # when the database is still initializing (typical on the first `docker compose up`)
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    restart: on-failure
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/postgres
       - SPRING_PROFILES_ACTIVE=dev
@@ -26,6 +30,11 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 2s
+      timeout: 5s
+      retries: 15
 
 networks:
   campus-coffee-net:

@@ -20,14 +20,19 @@ data class Pos(
     val campus: CampusType,
     val street: String,
     val houseNumber: String,
-    val postalCode: Int,
+    val postalCode: String,
     val city: String
 ) : DomainModel<Long> {
     init {
         if (!HOUSE_NUMBER_PATTERN.matches(houseNumber)) {
             throw ValidationException("Invalid house number '$houseNumber'.")
         }
-        if (postalCode < MIN_POSTAL_CODE || postalCode > MAX_POSTAL_CODE) {
+        // a German postal code is a fixed five-digit string (leading zeros are significant, e.g.
+        // "01067"), so the range check can compare the strings directly
+        if (!POSTAL_CODE_PATTERN.matches(postalCode) ||
+            postalCode < MIN_POSTAL_CODE ||
+            postalCode > MAX_POSTAL_CODE
+        ) {
             throw ValidationException("Invalid postal code '$postalCode'.")
         }
     }
@@ -35,8 +40,10 @@ data class Pos(
     companion object {
         // see https://github.com/zauberware/postal-codes-json-xml-csv/blob/master/data/DE.zip
         // visible to tests so they derive boundary inputs from these bounds instead of duplicating them
-        internal const val MIN_POSTAL_CODE = 1067
-        internal const val MAX_POSTAL_CODE = 99998
+        internal const val MIN_POSTAL_CODE = "01067"
+        internal const val MAX_POSTAL_CODE = "99998"
+
+        private val POSTAL_CODE_PATTERN = Regex("\\d{5}")
 
         // https://de.wikipedia.org/wiki/Hausnummer#Hausnummernerg%C3%A4nzungen
         private val HOUSE_NUMBER_PATTERN = Regex("\\d+[ \\-]?[a-zA-Z]?")

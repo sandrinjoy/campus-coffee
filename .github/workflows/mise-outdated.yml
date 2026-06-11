@@ -26,7 +26,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          report="$(mise outdated 2>/dev/null || true)"
+          # capture the exit code explicitly: a failing `mise outdated` (network error, regression in a
+          # newer mise) must fail the workflow visibly instead of being mistaken for "all up to date"
+          set +e
+          report="$(mise outdated)"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ -z "$report" ]; then
+            echo "::error::mise outdated failed with exit code $status and produced no report."
+            exit 1
+          fi
           if [ -z "$report" ]; then
             echo "All mise tools are up to date."
             exit 0

@@ -13,11 +13,11 @@ import jakarta.persistence.Version
 @Table(name = "reviews")
 class ReviewEntity : Entity() {
     @field:ManyToOne
-    @field:JoinColumn(name = "pos_id")
+    @field:JoinColumn(name = "pos_id", nullable = false)
     var pos: PosEntity? = null
 
     @field:ManyToOne
-    @field:JoinColumn(name = "author_id")
+    @field:JoinColumn(name = "author_id", nullable = false)
     var author: UserEntity? = null
 
     var review: String? = null
@@ -32,4 +32,9 @@ class ReviewEntity : Entity() {
     @field:Version
     @field:Column(name = "version")
     var version: Long? = null
+
+    companion object {
+        /** Name of the unique constraint on (pos_id, author_id), declared in the Flyway migration. */
+        const val POS_AUTHOR_UNIQUE_CONSTRAINT = "uq_reviews_pos_author"
+    }
 }

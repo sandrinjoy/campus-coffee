@@ -1,5 +1,6 @@
 package de.seuhd.campuscoffee.tests.system
 
+import de.seuhd.campuscoffee.api.dtos.PosDto
 import de.seuhd.campuscoffee.domain.tests.TestFixtures
 import de.seuhd.campuscoffee.tests.SystemTestUtils.assertEqualsIgnoringIdAndTimestamps
 import de.seuhd.campuscoffee.tests.SystemTestUtils.assertEqualsIgnoringTimestamps
@@ -24,6 +25,23 @@ class PosSystemTests : AbstractSystemTest() {
             )
 
         assertEqualsIgnoringIdAndTimestamps(createdPos, posToCreate)
+    }
+
+    @Test
+    fun `creating a POS returns a Location header pointing at the new resource`() {
+        val dto = posDtoMapper.fromDomain(TestFixtures.getPosFixturesForInsertion().first())
+
+        val result =
+            client()
+                .post()
+                .uri("/api/pos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(dto)
+                .exchange()
+                .returnResult<PosDto>()
+
+        assertThat(result.status.value()).isEqualTo(HttpStatus.CREATED.value())
+        assertThat(result.responseHeaders.location.toString()).endsWith("/api/pos/${result.responseBody!!.id}")
     }
 
     @Test

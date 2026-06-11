@@ -81,3 +81,8 @@ gradle/wrapper/
 *.log.*
 *.lck
 campus-coffee-service.yaml
+
+#############
+# AI slop   #
+#############
+ai-slop-report.md

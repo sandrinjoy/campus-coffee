@@ -1,5 +1,6 @@
 package de.seuhd.campuscoffee.data.implementations
 
+import de.seuhd.campuscoffee.data.constraints.ConstraintMapping
 import de.seuhd.campuscoffee.data.mapper.PosEntityMapper
 import de.seuhd.campuscoffee.data.mapper.ReviewEntityMapper
 import de.seuhd.campuscoffee.data.mapper.UserEntityMapper
@@ -12,8 +13,9 @@ import de.seuhd.campuscoffee.domain.ports.data.ReviewDataService
 import org.springframework.stereotype.Service
 
 /**
- * Data-layer adapter implementing the review data service port. Reviews have no unique constraints,
- * so no constraint mappings are declared.
+ * Data-layer adapter implementing the review data service port. The (pos, author) pair is unique: the
+ * database constraint is the authoritative guard for the "one review per author per POS" rule, closing
+ * the race the domain-level check-then-act cannot.
  */
 @Service
 class ReviewDataServiceImpl(
@@ -25,7 +27,13 @@ class ReviewDataServiceImpl(
         repository,
         entityMapper,
         Review::class.java,
-        emptySet()
+        setOf(
+            ConstraintMapping(
+                { "POS ${it.pos.id}, author ${it.author.id}" },
+                "pos_id/author_id",
+                ReviewEntity.POS_AUTHOR_UNIQUE_CONSTRAINT
+            )
+        )
     ),
     ReviewDataService {
     override fun filter(

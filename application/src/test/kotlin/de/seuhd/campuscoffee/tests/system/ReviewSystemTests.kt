@@ -1,12 +1,14 @@
 package de.seuhd.campuscoffee.tests.system
 
 import de.seuhd.campuscoffee.api.dtos.ReviewDto
+import de.seuhd.campuscoffee.domain.configuration.ApprovalConfiguration
 import de.seuhd.campuscoffee.domain.model.objects.Pos
 import de.seuhd.campuscoffee.domain.model.objects.User
 import de.seuhd.campuscoffee.domain.tests.TestFixtures
 import de.seuhd.campuscoffee.tests.SystemTestUtils.reviewRequests
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 
 /**
@@ -15,6 +17,9 @@ import org.springframework.http.HttpStatus
  * approvals from users other than the author to become approved.
  */
 class ReviewSystemTests : AbstractSystemTest() {
+    @Autowired
+    private lateinit var approvalConfiguration: ApprovalConfiguration
+
     @Test
     fun `creating a review returns it unapproved`() {
         val pos = createPos()
@@ -52,8 +57,6 @@ class ReviewSystemTests : AbstractSystemTest() {
                 .create(listOf(reviewFor(pos, author, "Original review text, long enough.")))
                 .first()
 
-        // approval count and status are not asserted: an update currently resets both because
-        // ReviewDtoMapper hardcodes them on toDomain.
         val updated =
             reviewRequests
                 .update(listOf(created.copy(review = "Updated review text, also long enough.")))
@@ -62,6 +65,80 @@ class ReviewSystemTests : AbstractSystemTest() {
         assertThat(updated.review).isEqualTo("Updated review text, also long enough.")
         assertThat(reviewRequests.retrieveById(created.id!!).review)
             .isEqualTo("Updated review text, also long enough.")
+    }
+
+    @Test
+    fun `updating a review keeps its approval state`() {
+        val pos = createPos()
+        val author = createUser("author", "author@uni-heidelberg.de")
+        // exactly the configured quorum of approvers, so the test does not depend on min-count = 3
+        val approvers =
+            (1..approvalConfiguration.minCount)
+                .map { createUser("approver_$it", "approver$it@uni-heidelberg.de") }
+        val created =
+            reviewRequests
+                .create(listOf(reviewFor(pos, author, "Review text before the update.")))
+                .first()
+        approvers.forEach { reviewRequests.approve(created.id!!, it.id!!) }
+        assertThat(reviewRequests.retrieveById(created.id!!).approved).isTrue()
+
+        // approvals are managed by the approval workflow; a text edit must not erase them
+        val updated =
+            reviewRequests
+                .update(listOf(created.copy(review = "Review text after the update.")))
+                .first()
+
+        assertThat(updated.review).isEqualTo("Review text after the update.")
+        assertThat(updated.approved).isTrue()
+        assertThat(reviewRequests.retrieveById(created.id!!).approved).isTrue()
+    }
+
+    @Test
+    fun `re-pointing a review at a different POS returns 400 Bad Request`() {
+        val firstPos = createPos()
+        val secondPos =
+            posService.upsert(
+                TestFixtures.getPosFixturesForInsertion().last().copy(name = "Second POS for the move test")
+            )
+        val author = createUser("author", "author@uni-heidelberg.de")
+        val reviewOnFirstPos =
+            reviewRequests
+                .create(listOf(reviewFor(firstPos, author, "Review for the first POS.")))
+                .first()
+        val reviewOnSecondPos =
+            reviewRequests
+                .create(listOf(reviewFor(secondPos, author, "Review for the second POS.")))
+                .first()
+
+        // a review's POS and author are fixed at creation: re-pointing the second review at the first
+        // POS would yield two reviews by the same author and carry approvals to the wrong POS
+        val movedReview = reviewOnSecondPos.copy(posId = firstPos.id)
+        val statusCode =
+            reviewRequests
+                .updateAndReturnStatusCodes(listOf(movedReview))
+                .first()
+
+        assertThat(statusCode).isEqualTo(HttpStatus.BAD_REQUEST.value())
+        // both reviews still point at their original POS
+        assertThat(reviewRequests.retrieveById(reviewOnFirstPos.id!!).posId).isEqualTo(firstPos.id)
+        assertThat(reviewRequests.retrieveById(reviewOnSecondPos.id!!).posId).isEqualTo(secondPos.id)
+    }
+
+    @Test
+    fun `updating a review that does not exist returns 404 Not Found`() {
+        val pos = createPos()
+        val author = createUser("author", "author@uni-heidelberg.de")
+        val existing =
+            reviewRequests
+                .create(listOf(reviewFor(pos, author, "The author's only review, long enough.")))
+                .first()
+
+        // unknown id, but the same author/POS pair as the existing review: the missing id must win
+        // (404), not the duplicate rule (409)
+        val ghost = existing.copy(id = 9999L)
+        val statusCode = reviewRequests.updateAndReturnStatusCodes(listOf(ghost)).first()
+
+        assertThat(statusCode).isEqualTo(HttpStatus.NOT_FOUND.value())
     }
 
     @Test
@@ -131,17 +208,19 @@ class ReviewSystemTests : AbstractSystemTest() {
     }
 
     @Test
-    fun `creating a second review by the same author for a POS returns 400 Bad Request`() {
+    fun `creating a second review by the same author for a POS returns 409 Conflict`() {
         val pos = createPos()
         val author = createUser("author", "author@uni-heidelberg.de")
         reviewRequests.create(listOf(reviewFor(pos, author, "First review by this author.")))
 
+        // a duplicate is a conflict (the same status the uq_reviews_pos_author constraint produces
+        // when two concurrent creates race past the application-level check)
         val statusCode =
             reviewRequests
                 .createAndReturnStatusCodes(listOf(reviewFor(pos, author, "Second review by the same author.")))
                 .first()
 
-        assertThat(statusCode).isEqualTo(HttpStatus.BAD_REQUEST.value())
+        assertThat(statusCode).isEqualTo(HttpStatus.CONFLICT.value())
     }
 
     @Test

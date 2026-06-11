@@ -1,7 +1,9 @@
 package de.seuhd.campuscoffee.api.exceptions
 
 import de.seuhd.campuscoffee.domain.exceptions.ConcurrentUpdateException
+import de.seuhd.campuscoffee.domain.exceptions.DeletionConflictException
 import de.seuhd.campuscoffee.domain.exceptions.DuplicationException
+import de.seuhd.campuscoffee.domain.exceptions.ExternalServiceException
 import de.seuhd.campuscoffee.domain.exceptions.MissingFieldException
 import de.seuhd.campuscoffee.domain.exceptions.NotFoundException
 import de.seuhd.campuscoffee.domain.exceptions.ValidationException
@@ -36,9 +38,11 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
         NotFoundException::class,
         DuplicationException::class,
         ConcurrentUpdateException::class,
+        DeletionConflictException::class,
         IllegalArgumentException::class,
         MissingFieldException::class,
-        ValidationException::class
+        ValidationException::class,
+        ExternalServiceException::class
     )
     fun handleMappedException(
         exception: Exception,
@@ -131,10 +135,14 @@ class GlobalExceptionHandler : ResponseEntityExceptionHandler() {
                 DuplicationException::class.java to ExceptionConfig(HttpStatus.CONFLICT, "Duplicate resource: {}"),
                 ConcurrentUpdateException::class.java to
                     ExceptionConfig(HttpStatus.CONFLICT, "Concurrent modification: {}"),
+                DeletionConflictException::class.java to
+                    ExceptionConfig(HttpStatus.CONFLICT, "Deletion conflict: {}"),
                 IllegalArgumentException::class.java to ExceptionConfig(HttpStatus.BAD_REQUEST, "Bad request: {}"),
                 MissingFieldException::class.java to ExceptionConfig(HttpStatus.BAD_REQUEST, "Bad request: {}"),
                 ValidationException::class.java to
-                    ExceptionConfig(HttpStatus.BAD_REQUEST, "Domain validation failed: {}")
+                    ExceptionConfig(HttpStatus.BAD_REQUEST, "Domain validation failed: {}"),
+                ExternalServiceException::class.java to
+                    ExceptionConfig(HttpStatus.BAD_GATEWAY, "External service failure: {}")
             )
     }
 }

@@ -1,7 +1,9 @@
 package de.seuhd.campuscoffee.data.integration
 
 import de.seuhd.campuscoffee.domain.exceptions.DuplicationException
+import de.seuhd.campuscoffee.domain.model.objects.Review
 import de.seuhd.campuscoffee.domain.ports.data.PosDataService
+import de.seuhd.campuscoffee.domain.ports.data.ReviewDataService
 import de.seuhd.campuscoffee.domain.ports.data.UserDataService
 import de.seuhd.campuscoffee.domain.tests.TestFixtures
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -20,6 +22,29 @@ class CrudDataServiceDuplicationTest : AbstractDataIntegrationTest() {
 
     @Autowired
     private lateinit var userDataService: UserDataService
+
+    @Autowired
+    private lateinit var reviewDataService: ReviewDataService
+
+    @Test
+    fun `upsert throws DuplicationException for a second review by the same author and POS`() {
+        val pos = posDataService.upsert(TestFixtures.getPosFixturesForInsertion().first())
+        val author = userDataService.upsert(TestFixtures.getUserFixturesForInsertion().first())
+        val review =
+            Review(
+                pos = pos,
+                author = author,
+                review = "First review, long enough to pass.",
+                approvalCount = 0,
+                approved = false
+            )
+        reviewDataService.upsert(review)
+
+        // even when the domain-level check is bypassed (e.g., by a concurrent create), the database
+        // constraint rejects the duplicate and the data service reports it as a DuplicationException
+        assertThatThrownBy { reviewDataService.upsert(review.copy(review = "Second review, long enough.")) }
+            .isInstanceOf(DuplicationException::class.java)
+    }
 
     @Test
     fun `upsert throws DuplicationException for a duplicate POS name`() {

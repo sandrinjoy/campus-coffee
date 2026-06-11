@@ -4,6 +4,7 @@ import de.seuhd.campuscoffee.domain.model.enums.CampusType
 import de.seuhd.campuscoffee.domain.model.enums.PosType
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import java.time.LocalDateTime
 
@@ -16,7 +17,8 @@ data class PosDto(
     override val id: Long? = null,
     val createdAt: LocalDateTime? = null,
     val updatedAt: LocalDateTime? = null,
-    @field:Size(min = 1, max = 255, message = "Name must be between 1 and 255 characters long.")
+    @field:NotBlank(message = "Name cannot be empty.")
+    @field:Size(max = 255, message = "Name must be at most 255 characters long.")
     val name: String?,
     @field:NotBlank(message = "Description cannot be empty.")
     val description: String?,
@@ -30,7 +32,8 @@ data class PosDto(
     @field:Size(min = 1, max = 255, message = "House number must be between 1 and 255 characters long.")
     val houseNumber: String?,
     @field:NotNull
-    val postalCode: Int?,
+    @field:Pattern(regexp = "\\d{5}", message = "Postal code must be a five-digit string (e.g., \"69117\").")
+    val postalCode: String?,
     @field:NotNull
     @field:Size(min = 1, max = 255, message = "City must be between 1 and 255 characters long.")
     val city: String?

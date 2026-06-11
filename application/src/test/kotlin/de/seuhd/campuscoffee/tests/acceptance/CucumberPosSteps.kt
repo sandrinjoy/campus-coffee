@@ -33,7 +33,7 @@ class CucumberPosSteps {
             campus = CampusType.valueOf(row["campus"]!!),
             street = row["street"],
             houseNumber = row["houseNumber"],
-            postalCode = row["postalCode"]!!.toInt(),
+            postalCode = row["postalCode"],
             city = row["city"]
         )
 
@@ -69,8 +69,10 @@ class CucumberPosSteps {
 
     // Then -----------------------------------------------------------------------
 
-    @Then("the POS list should contain the same elements in the same order")
-    fun thePosListShouldContainTheSameElementsInTheSameOrder() {
+    // the API does not guarantee an order for GET /pos, so the step asserts the same elements
+    // (including duplicates) regardless of order
+    @Then("the POS list should contain the same elements")
+    fun thePosListShouldContainTheSameElements() {
         assertThat(posRequests.retrieveAll())
             .usingRecursiveFieldByFieldElementComparatorIgnoringFields("id", "createdAt", "updatedAt")
             .containsExactlyInAnyOrderElementsOf(createdPosList)

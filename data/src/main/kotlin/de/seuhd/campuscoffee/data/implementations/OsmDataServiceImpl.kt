@@ -1,8 +1,10 @@
 package de.seuhd.campuscoffee.data.implementations
 
+import com.fasterxml.jackson.core.JacksonException
 import com.fasterxml.jackson.dataformat.xml.XmlMapper
 import de.seuhd.campuscoffee.data.client.OsmClient
 import de.seuhd.campuscoffee.data.client.OsmResponse
+import de.seuhd.campuscoffee.domain.exceptions.ExternalServiceException
 import de.seuhd.campuscoffee.domain.exceptions.MissingFieldException
 import de.seuhd.campuscoffee.domain.exceptions.NotFoundException
 import de.seuhd.campuscoffee.domain.model.enums.OsmAmenity
@@ -10,38 +12,54 @@ import de.seuhd.campuscoffee.domain.model.objects.OsmNode
 import de.seuhd.campuscoffee.domain.ports.data.OsmDataService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import org.springframework.web.client.HttpClientErrorException
 import org.springframework.web.client.RestClientException
 
 /**
  * OSM data service that fetches node data from the OpenStreetMap API.
+ *
+ * Failure modes are kept distinct: only a 404/410 from the OSM API means the node does not exist;
+ * transport errors, timeouts, server errors, and malformed or empty responses are failures of the
+ * external service
+ * ([ExternalServiceException]), so an OSM outage is not misreported as a missing node.
  */
 @Service
 class OsmDataServiceImpl(
     private val osmClient: OsmClient
 ) : OsmDataService {
     override fun fetchNode(nodeId: Long): OsmNode {
-        try {
-            log.debug("Fetching OSM node with ID '{}'...", nodeId)
-            val xmlResponse = osmClient.fetchNode(nodeId)
-
-            if (xmlResponse.isNullOrEmpty()) {
-                log.error("Empty response from OSM API for node with ID '{}'.", nodeId)
+        log.debug("Fetching OSM node with ID '{}'...", nodeId)
+        val xmlResponse =
+            try {
+                osmClient.fetchNode(nodeId)
+            } catch (ignored: HttpClientErrorException.NotFound) {
+                // a 404 conveys nothing beyond its status code, so the exception is not kept as a cause
+                log.warn("OSM node with ID '{}' does not exist.", nodeId)
                 throw NotFoundException(OsmNode::class.java, nodeId)
+            } catch (ignored: HttpClientErrorException.Gone) {
+                // the OSM API reports deleted nodes as 410 Gone
+                log.warn("OSM node with ID '{}' was deleted.", nodeId)
+                throw NotFoundException(OsmNode::class.java, nodeId)
+            } catch (e: RestClientException) {
+                log.error("Error calling the OSM API for node with ID '{}'", nodeId, e)
+                throw ExternalServiceException(OSM_SERVICE_NAME, e)
             }
 
-            val node = parseOsmXml(xmlResponse, nodeId)
-            log.debug("Successfully fetched and parsed OSM node with ID '{}'.", nodeId)
-            return node
-        } catch (e: RestClientException) {
-            log.warn("HTTP error fetching OSM node with ID '{}': {}", nodeId, e.message)
-            throw NotFoundException(OsmNode::class.java, nodeId)
-        } catch (e: MissingFieldException) {
-            // re-throw missing fields exception as-is
-            throw e
-        } catch (e: Exception) {
-            log.error("Error fetching OSM node with ID '{}'", nodeId, e)
-            throw NotFoundException(OsmNode::class.java, nodeId)
+        if (xmlResponse.isNullOrEmpty()) {
+            // a 2xx without a body is a malformed OSM response (a missing node would have been a 404)
+            log.error("Empty response from OSM API for node with ID '{}'.", nodeId)
+            throw ExternalServiceException(OSM_SERVICE_NAME)
         }
+
+        val node =
+            try {
+                parseOsmXml(xmlResponse, nodeId)
+            } catch (e: JacksonException) {
+                log.error("Malformed XML from OSM API for node with ID '{}'", nodeId, e)
+                throw ExternalServiceException(OSM_SERVICE_NAME, e)
+            }
+        log.debug("Successfully fetched and parsed OSM node with ID '{}'.", nodeId)
+        return node
     }
 
     /**
@@ -111,5 +129,8 @@ class OsmDataServiceImpl(
 
         /** Description applied when an OSM node carries no `description` tag. */
         const val DEFAULT_DESCRIPTION: String = "n/a"
+
+        /** Service name reported in [ExternalServiceException] messages. */
+        const val OSM_SERVICE_NAME: String = "OpenStreetMap"
     }
 }

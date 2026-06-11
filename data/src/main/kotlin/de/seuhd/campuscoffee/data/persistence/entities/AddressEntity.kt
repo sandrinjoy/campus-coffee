@@ -16,8 +16,8 @@ class AddressEntity {
     @field:Column(name = "house_number_suffix")
     var houseNumberSuffix: Char? = null
 
-    @field:Column(name = "postal_code")
-    var postalCode: Int? = null
+    @field:Column(name = "postal_code", length = 5)
+    var postalCode: String? = null
 
     var city: String? = null
 }

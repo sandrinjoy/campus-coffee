@@ -1,10 +1,9 @@
 package de.seuhd.campuscoffee.domain.implementation
 
+import de.seuhd.campuscoffee.domain.exceptions.DuplicationException
 import de.seuhd.campuscoffee.domain.exceptions.NotFoundException
 import de.seuhd.campuscoffee.domain.exceptions.ValidationException
-import de.seuhd.campuscoffee.domain.model.objects.Pos
 import de.seuhd.campuscoffee.domain.model.objects.Review
-import de.seuhd.campuscoffee.domain.model.objects.User
 import de.seuhd.campuscoffee.domain.ports.data.PosDataService
 import de.seuhd.campuscoffee.domain.ports.data.ReviewDataService
 import de.seuhd.campuscoffee.domain.ports.data.UserDataService
@@ -66,7 +65,7 @@ class ReviewServiceTest {
             TestFixtures
                 .getReviewFixtures()
                 .first()
-                .copy(approvalCount = approvalConfiguration.minCount!! - 1, approved = false)
+                .copy(approvalCount = approvalConfiguration.minCount - 1, approved = false)
         val user = TestFixtures.getUserFixtures().last()
         val userId = requireNotNull(user.id)
         whenever(userDataService.getById(userId)).thenReturn(user)
@@ -89,7 +88,7 @@ class ReviewServiceTest {
         val posId = requireNotNull(pos.id)
         val reviews =
             TestFixtures.getReviewFixtures().map {
-                it.copy(pos = pos, approvalCount = approvalConfiguration.minCount!!, approved = true)
+                it.copy(pos = pos, approvalCount = approvalConfiguration.minCount, approved = true)
             }
         whenever(posDataService.getById(posId)).thenReturn(pos)
         whenever(reviewDataService.filter(pos, true)).thenReturn(reviews)
@@ -112,23 +111,25 @@ class ReviewServiceTest {
     }
 
     @Test
-    fun `upsert throws ValidationException for a duplicate review by the same author and POS`() {
-        // given a new review (id is null), since the duplicate check runs only on creation
+    fun `upsert throws DuplicationException for a duplicate review by the same author and POS`() {
+        // a new review (id is null) while a persisted review by the same author for the same POS
+        // exists; a duplicate is a 409 conflict, matching the uq_reviews_pos_author database constraint
         val review = TestFixtures.getReviewFixturesForInsertion().first()
+        val persistedReview = TestFixtures.getReviewFixtures().first()
         val pos = review.pos
         val author = review.author
         val posId = requireNotNull(pos.id)
         whenever(posDataService.getById(posId)).thenReturn(pos)
-        whenever(reviewDataService.filter(pos, author)).thenReturn(listOf(review))
+        whenever(reviewDataService.filter(pos, author)).thenReturn(listOf(persistedReview))
 
-        assertThrows<ValidationException> { reviewService.upsert(review) }
+        assertThrows<DuplicationException> { reviewService.upsert(review) }
         verify(posDataService).getById(posId)
         verify(reviewDataService).filter(pos, author)
     }
 
     @Test
     fun `updateApprovalStatus approves a review once the threshold is reached`() {
-        val quorum = approvalConfiguration.minCount!!
+        val quorum = approvalConfiguration.minCount
         val unapprovedReview =
             TestFixtures
                 .getReviewFixtures()
@@ -180,21 +181,68 @@ class ReviewServiceTest {
     }
 
     @Test
-    fun `upsert skips the duplicate check when updating an existing review`() {
-        // given an existing review with a non-null id
-        val review = TestFixtures.getReviewFixtures().first()
-        val pos = review.pos
-        val reviewId = requireNotNull(review.id)
+    fun `upsert updates a review and keeps its approval state`() {
+        // the persisted review is approved; the update carries reset values, which must not overwrite
+        // the approval state managed by the approval workflow
+        val existingReview = TestFixtures.getReviewFixtures().first().copy(approvalCount = 3, approved = true)
+        val update =
+            existingReview.copy(review = "Updated text for this review!", approvalCount = 0, approved = false)
+        val pos = existingReview.pos
+        val reviewId = requireNotNull(existingReview.id)
         val posId = requireNotNull(pos.id)
         whenever(posDataService.getById(posId)).thenReturn(pos)
-        whenever(reviewDataService.getById(reviewId)).thenReturn(review)
-        whenever(reviewDataService.upsert(review)).thenReturn(review)
+        whenever(reviewDataService.getById(reviewId)).thenReturn(existingReview)
+        whenever(reviewDataService.upsert(any<Review>())).thenAnswer { it.getArgument<Review>(0) }
 
-        val result = reviewService.upsert(review)
+        val result = reviewService.upsert(update)
 
-        // the per-author filter is never consulted on update
-        verify(reviewDataService, never()).filter(any<Pos>(), any<User>())
-        verify(reviewDataService).upsert(review)
-        assertThat(result.id).isEqualTo(review.id)
+        assertThat(result.review).isEqualTo(update.review)
+        assertThat(result.approvalCount).isEqualTo(existingReview.approvalCount)
+        assertThat(result.approved).isEqualTo(existingReview.approved)
+    }
+
+    @Test
+    fun `upsert throws NotFoundException when updating a missing review`() {
+        // the author already has a review for the POS, so a wrong order of checks would report the
+        // duplicate conflict; the unknown id must win and yield a 404
+        val persistedReview = TestFixtures.getReviewFixtures().first()
+        val pos = persistedReview.pos
+        val posId = requireNotNull(pos.id)
+        val update = persistedReview.copy(id = 9999L)
+        whenever(posDataService.getById(posId)).thenReturn(pos)
+        whenever(reviewDataService.getById(9999L)).thenThrow(NotFoundException(Review::class.java, 9999L))
+
+        assertThrows<NotFoundException> { reviewService.upsert(update) }
+        verify(reviewDataService, never()).upsert(any<Review>())
+    }
+
+    @Test
+    fun `upsert throws ValidationException when an update re-points a review at a different POS`() {
+        // the persisted review belongs to one POS; the update payload points at another. Moving a
+        // review would carry its approvals to a POS nobody approved a review for.
+        val persistedReview = TestFixtures.getReviewFixtures().last()
+        val targetPos = TestFixtures.getReviewFixtures().first().pos
+        val update = persistedReview.copy(pos = targetPos)
+        val reviewId = requireNotNull(persistedReview.id)
+        whenever(posDataService.getById(requireNotNull(targetPos.id))).thenReturn(targetPos)
+        whenever(reviewDataService.getById(reviewId)).thenReturn(persistedReview)
+
+        assertThrows<ValidationException> { reviewService.upsert(update) }
+        verify(reviewDataService, never()).upsert(any<Review>())
+    }
+
+    @Test
+    fun `upsert throws ValidationException when an update changes the author of a review`() {
+        // changing the author could retroactively mark a review as approved by its own author
+        val persistedReview = TestFixtures.getReviewFixtures().first()
+        val newAuthor = TestFixtures.getUserFixtures().last()
+        val update = persistedReview.copy(author = newAuthor)
+        val pos = persistedReview.pos
+        val reviewId = requireNotNull(persistedReview.id)
+        whenever(posDataService.getById(requireNotNull(pos.id))).thenReturn(pos)
+        whenever(reviewDataService.getById(reviewId)).thenReturn(persistedReview)
+
+        assertThrows<ValidationException> { reviewService.upsert(update) }
+        verify(reviewDataService, never()).upsert(any<Review>())
     }
 }

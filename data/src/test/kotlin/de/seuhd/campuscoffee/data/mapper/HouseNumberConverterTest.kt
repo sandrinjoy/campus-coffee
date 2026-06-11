@@ -47,6 +47,15 @@ class HouseNumberConverterTest {
     }
 
     @Test
+    fun `split throws IllegalArgumentException for a numeric part beyond Int range`() {
+        // the domain pattern does not bound the digit count; the converter must reject the overflow
+        // as a validation error instead of letting toInt throw a NumberFormatException
+        assertThatThrownBy { converter.split("2147483648") }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("too large")
+    }
+
+    @Test
     fun `merge returns null for a null number`() {
         assertThat(converter.merge(null, 'a')).isNull()
     }

@@ -12,16 +12,17 @@ import org.junit.jupiter.params.provider.ValueSource
  */
 class PosTest {
     @ParameterizedTest
-    // the inclusive bounds and a regular code in between; bounds come from Pos, not hard-coded here
-    @ValueSource(ints = [Pos.MIN_POSTAL_CODE, Pos.MAX_POSTAL_CODE, 69117])
-    fun `the Pos constructor accepts valid postal codes`(postalCode: Int) {
+    // the inclusive bounds, a regular code in between, and a leading-zero code; bounds come from Pos
+    @ValueSource(strings = [Pos.MIN_POSTAL_CODE, Pos.MAX_POSTAL_CODE, "69117", "01069"])
+    fun `the Pos constructor accepts valid postal codes`(postalCode: String) {
         assertDoesNotThrow { posWithPostalCode(postalCode) }
     }
 
     @ParameterizedTest
-    // just below the lower bound, just above the upper bound, and zero
-    @ValueSource(ints = [Pos.MIN_POSTAL_CODE - 1, Pos.MAX_POSTAL_CODE + 1, 0])
-    fun `the Pos constructor rejects postal codes outside the range with ValidationException`(postalCode: Int) {
+    // just below "01067", just above "99998", too short (also a code with its leading zero dropped),
+    // too long, and non-digit characters
+    @ValueSource(strings = ["01066", "99999", "1067", "691170", "6911a", "69 17"])
+    fun `the Pos constructor rejects invalid postal codes with ValidationException`(postalCode: String) {
         assertThrows<ValidationException> { posWithPostalCode(postalCode) }
     }
 
@@ -37,7 +38,7 @@ class PosTest {
         assertThrows<ValidationException> { posWithHouseNumber(houseNumber) }
     }
 
-    private fun posWithPostalCode(postalCode: Int): Pos =
+    private fun posWithPostalCode(postalCode: String): Pos =
         TestFixtures.getPosFixtures().first().copy(postalCode = postalCode)
 
     private fun posWithHouseNumber(houseNumber: String): Pos =

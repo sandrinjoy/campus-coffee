@@ -14,7 +14,8 @@ import org.springframework.test.web.servlet.client.returnResult
 
 /**
  * System tests that pin the HTTP status codes produced by the global exception handler:
- * duplicate unique fields return 409, missing entities return 404, and invalid input returns 400.
+ * duplicate unique fields and blocked deletions return 409, missing entities return 404, and invalid
+ * input returns 400.
  */
 class ErrorPathSystemTests : AbstractSystemTest() {
     @Test
@@ -35,6 +36,42 @@ class ErrorPathSystemTests : AbstractSystemTest() {
         val statusCode = userRequests.createAndReturnStatusCodes(listOf(user)).first()
 
         assertThat(statusCode).isEqualTo(HttpStatus.CONFLICT.value())
+    }
+
+    @Test
+    fun `creating a POS with an id in the body returns 400 and does not update the existing POS`() {
+        val created =
+            posRequests
+                .create(listOf(posDtoMapper.fromDomain(TestFixtures.getPosFixturesForInsertion().first())))
+                .first()
+
+        // the server assigns ids; a POST carrying an existing id must not silently become an update
+        val hijack = created.copy(name = "Hijacked name")
+        val statusCode = posRequests.createAndReturnStatusCodes(listOf(hijack)).first()
+
+        assertThat(statusCode).isEqualTo(HttpStatus.BAD_REQUEST.value())
+        assertThat(posRequests.retrieveById(created.id!!).name).isEqualTo(created.name)
+    }
+
+    @Test
+    fun `deleting a POS or user that has reviews returns 409 Conflict`() {
+        val pos =
+            posRequests
+                .create(listOf(posDtoMapper.fromDomain(TestFixtures.getPosFixturesForInsertion().first())))
+                .first()
+        val user =
+            userRequests
+                .create(listOf(userDtoMapper.fromDomain(TestFixtures.getUserFixturesForInsertion().first())))
+                .first()
+        reviewRequests.create(
+            listOf(ReviewDto(posId = pos.id, authorId = user.id, review = "A review that blocks deletion."))
+        )
+
+        // the review references both, so deleting either parent is a conflict, not a 500
+        assertThat(posRequests.deleteAndReturnStatusCodes(listOf(pos.id!!)).first())
+            .isEqualTo(HttpStatus.CONFLICT.value())
+        assertThat(userRequests.deleteAndReturnStatusCodes(listOf(user.id!!)).first())
+            .isEqualTo(HttpStatus.CONFLICT.value())
     }
 
     @Test
@@ -92,6 +129,24 @@ class ErrorPathSystemTests : AbstractSystemTest() {
 
         assertThat(result.status.value()).isEqualTo(HttpStatus.BAD_REQUEST.value())
         assertThat(result.responseBody).contains("city")
+    }
+
+    @Test
+    fun `creating a POS without a name returns 400 Bad Request naming the field`() {
+        // @Size alone treats null as valid; @NotBlank must reject a missing name as a 400, not a 500
+        val invalid = posDtoMapper.fromDomain(TestFixtures.getPosFixturesForInsertion().first()).copy(name = null)
+
+        val result =
+            client()
+                .post()
+                .uri("/api/pos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(invalid)
+                .exchange()
+                .returnResult<String>()
+
+        assertThat(result.status.value()).isEqualTo(HttpStatus.BAD_REQUEST.value())
+        assertThat(result.responseBody).contains("name")
     }
 
     @Test

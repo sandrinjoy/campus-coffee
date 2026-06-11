@@ -1,6 +1,6 @@
 package de.seuhd.campuscoffee.domain.implementation
 
-import de.seuhd.campuscoffee.domain.exceptions.MissingFieldException
+import de.seuhd.campuscoffee.domain.exceptions.ValidationException
 import de.seuhd.campuscoffee.domain.model.enums.CampusType
 import de.seuhd.campuscoffee.domain.model.enums.OsmAmenity
 import de.seuhd.campuscoffee.domain.model.enums.PosType
@@ -12,7 +12,6 @@ import de.seuhd.campuscoffee.domain.ports.data.OsmDataService
 import de.seuhd.campuscoffee.domain.ports.data.PosDataService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 
 /**
  * Implementation of the POS service that handles business logic related to POS entities.
@@ -30,7 +29,9 @@ class PosServiceImpl(
         return posDataService.getByName(name)
     }
 
-    @Transactional
+    // deliberately not @Transactional: the remote OSM call must not hold a database connection or
+    // transaction open. The inner upsert call is a self-invocation, so CrudServiceImpl's @Transactional
+    // does not apply either; the import is a single insert, atomic in the repository's own transaction.
     override fun importFromOsmNode(
         nodeId: Long,
         campusType: CampusType
@@ -48,36 +49,24 @@ class PosServiceImpl(
     }
 
     /**
-     * Converts an OSM node to a POS domain object, mapping OSM amenity types to POS types and
-     * validating required fields.
+     * Converts an OSM node to a POS domain object, mapping OSM amenity types to POS types.
      *
-     * @throws MissingFieldException if required fields are missing or invalid
+     * @throws ValidationException if the node's house number or postal code is invalid
      */
     private fun convertOsmNodeToPos(
         osmNode: OsmNode,
         campusType: CampusType
-    ): Pos {
-        val posType = mapAmenityToPosType(osmNode.amenity)
-
-        val postalCode =
-            try {
-                osmNode.postcode.toInt()
-            } catch (e: NumberFormatException) {
-                log.error("Could not parse postcode {} of OSM node {}", osmNode.postcode, osmNode.nodeId)
-                throw MissingFieldException(OsmNode::class.java, osmNode.nodeId, "postcode")
-            }
-
-        return Pos(
+    ): Pos =
+        Pos(
             name = osmNode.name,
             description = osmNode.description,
-            type = posType,
+            type = mapAmenityToPosType(osmNode.amenity),
             campus = campusType,
             street = osmNode.street,
             houseNumber = osmNode.houseNumber,
-            postalCode = postalCode,
+            postalCode = osmNode.postcode,
             city = osmNode.city
         )
-    }
 
     /**
      * Maps an OpenStreetMap amenity type to a POS type.

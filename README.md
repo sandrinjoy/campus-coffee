@@ -2,12 +2,28 @@
 
 A Spring Boot teaching application for managing points of sale (POS) — cafés, bakeries, vending machines, and the like — on campus, with users and reviews. It follows a hexagonal (ports-and-adapters) architecture enforced by ArchUnit, built with Gradle (Kotlin DSL) on Java 25.
 
+## Scope: no authentication (yet)
+
+CampusCoffee is a teaching application and currently has no authentication or authorization. User
+identity is client-asserted: `POST /api/reviews` takes the author id in the request body, and
+`PUT /api/reviews/{id}/approve?user_id=...` takes the approver id as a query parameter. Every endpoint is
+open, including the destructive ones, and `GET /api/users` returns all users with their email addresses.
+Authentication and authorization will be added in a later iteration of the course material.
+
+Until then, do not run the application on a publicly reachable host with real data. If you deploy the
+demo (see [Deployment](#deployment)), restrict access — e.g., deploy to Cloud Run with
+`--no-allow-unauthenticated` — or treat the deployment as throwaway.
+
+The approval workflow inherits this gap: approvals are anonymous counts, so the same user can approve
+a review repeatedly (see [Approve reviews](#approve-reviews)). The rework, tracking approvers per user, only becomes meaningful once identity is trustworthy. It is
+therefore deferred to the same iteration and marked as `TODO(auth)` in `ReviewServiceImpl`.
+
 ## Prerequisites
 
 * Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) or a compatible open-source alternative such as [Rancher Desktop](https://rancherdesktop.io/).
 * Install the [Temurin JDK 25](https://adoptium.net/temurin/releases/?version=25&os=any&arch=any) and [Gradle 9.5](https://gradle.org/install/) either via the provided [`mise.toml`](mise.toml) file (see [getting started guide](https://mise.jdx.dev/getting-started.html) for details) or directly via your favorite package manager. If you use `mise`, run `mise trust mise.toml` and then `mise install` in the project root to set up the required tool versions. There is no Gradle wrapper; run Gradle through `mise`.
 * Install an IDE with Kotlin support. We recommend [IntelliJ](https://www.jetbrains.com/idea/), but you are free to use alternatives such as [VS Code](https://code.visualstudio.com/) with suitable extensions.
-* Import the project into your IDE. In IntelliJ, you can do this via `File` -> `Open` and selecting the root-level `build.gradle.kts`. If you have the `mise` [plugin](https://plugins.jetbrains.com/plugin/24904-mise) installed, IntelliJ will ask you to select the appropriate tool versions.
+* Import the project into your IDE. In IntelliJ, you can do this via `File` -> `Open` and selecting the project's root folder (the multi-module build is defined by the root-level `settings.gradle.kts`; there is no root `build.gradle.kts` because the shared build logic lives in `build-logic/`). If you have the `mise` [plugin](https://plugins.jetbrains.com/plugin/24904-mise) installed, IntelliJ will ask you to select the appropriate tool versions.
 * Ensure that your IDE as initialized the project correctly, including all `src`, `test`, and `resources` folders.
 
 ## Build application
@@ -100,7 +116,7 @@ curl http://localhost:8080/api/pos/1 # add valid POS id here
 
 POS by name:
 ```shell
-curl http://localhost:8080/api/pos/filter?name=Schmelzpunkt # add valid POS name here
+curl 'http://localhost:8080/api/pos/filter?name=Schmelzpunkt' # add valid POS name here; quote the URL so zsh does not glob the ?
 ```
 
 ##### Create POS
@@ -108,13 +124,13 @@ curl http://localhost:8080/api/pos/filter?name=Schmelzpunkt # add valid POS name
 Create a POS based on a JSON object provided in the request body:
 
 ```shell
-curl --request POST --header "Content-Type: application/json" --data '{"name":"New Café","description":"Description","type":"CAFE","campus":"ALTSTADT","street":"Hauptstraße","houseNumber":"100","postalCode":69117,"city":"Heidelberg"}' http://localhost:8080/api/pos
+curl --request POST --header "Content-Type: application/json" --data '{"name":"New Café","description":"Description","type":"CAFE","campus":"ALTSTADT","street":"Hauptstraße","houseNumber":"100","postalCode":"69117","city":"Heidelberg"}' http://localhost:8080/api/pos
 ```
 
 Create a POS based on an OpenStreetMap node:
 
 ```shell
-curl --request POST http://localhost:8080/api/pos/import/osm/5589879349?campus_type=ALTSTADT # set a valid OSM node ID here
+curl --request POST 'http://localhost:8080/api/pos/import/osm/5589879349?campus_type=ALTSTADT' # set a valid OSM node ID here
 ```
 
 IDs for testing:
@@ -125,14 +141,14 @@ IDs for testing:
 See bean validation in action:
 
 ```shell
-curl --header "Content-Type: application/json" --request POST -i --data '{"name":"","description":"","type":"CAFE","campus":"ALTSTADT","street":"Hauptstraße","houseNumber":"100","postalCode":69117,"city":"Heidelberg"}' http://localhost:8080/api/pos
+curl --header "Content-Type: application/json" --request POST -i --data '{"name":"","description":"","type":"CAFE","campus":"ALTSTADT","street":"Hauptstraße","houseNumber":"100","postalCode":"69117","city":"Heidelberg"}' http://localhost:8080/api/pos
 ```
 
 ##### Update POS
 
 Update title and description:
 ```shell
-curl --header "Content-Type: application/json" --request PUT --data '{"id":4,"name":"New coffee","description":"Great croissants","type":"CAFE","campus":"ALTSTADT","street":"Hauptstraße","houseNumber":"95","postalCode":69117,"city":"Heidelberg"}' http://localhost:8080/api/pos/4 # set correct POS id here and in the body
+curl --header "Content-Type: application/json" --request PUT --data '{"id":4,"name":"New coffee","description":"Great croissants","type":"CAFE","campus":"ALTSTADT","street":"Hauptstraße","houseNumber":"95","postalCode":"69117","city":"Heidelberg"}' http://localhost:8080/api/pos/4 # set correct POS id here and in the body
 ```
 
 ##### Delete POS
@@ -141,6 +157,9 @@ Delete POS by ID:
 ```shell
 curl --request DELETE -i http://localhost:8080/api/pos/1 # set existing POS ID here
 ```
+
+**Note:** A POS that still has reviews cannot be deleted; the API answers `409 Conflict`. With the
+seeded fixture data, POS 1 has reviews. Delete its reviews first or pick a POS without reviews (e.g., 3).
 
 #### Users endpoints (/api/users)
 
@@ -158,7 +177,7 @@ curl http://localhost:8080/api/users/1 # add valid user id here
 
 User by login name:
 ```shell
-curl http://localhost:8080/api/users/filter?login_name=jane_doe # add valid user login name here
+curl 'http://localhost:8080/api/users/filter?login_name=jane_doe' # add valid user login name here
 ```
 
 ##### Create users
@@ -183,8 +202,11 @@ curl --header "Content-Type: application/json" --request PUT --data '{"id":1,"cr
 
 Delete user by ID:
 ```shell
-curl --request DELETE -i http://localhost:8080/api/users/1 # set existing POS ID here
+curl --request DELETE -i http://localhost:8080/api/users/1 # set existing user ID here
 ```
+
+**Note:** A user who still has reviews cannot be deleted; the API answers `409 Conflict`. With the
+seeded fixture data, users 1-3 have authored reviews. Delete their reviews first or create a fresh user.
 
 #### Reviews endpoint (/api/reviews)
 
@@ -211,7 +233,7 @@ curl 'http://localhost:8080/api/reviews/filter?pos_id=1&approved=true' # add val
 curl --header "Content-Type: application/json" --request POST --data '{"posId":2,"authorId":1,"review":"Great place!"}' http://localhost:8080/api/reviews # use existing IDs for posId and authorId
 ```
 
-Users cannot create more than one review per POS:
+Users cannot create more than one review per POS (the second request returns `409 Conflict`):
 ```shell
 curl --header "Content-Type: application/json" --request POST --data '{"posId":2,"authorId":1,"review":"Great place!"}' http://localhost:8080/api/reviews # use existing IDs for posId and authorId
 ```
@@ -220,18 +242,23 @@ curl --header "Content-Type: application/json" --request POST --data '{"posId":2
 
 Users cannot approve their own reviews:
 ```shell
-curl --request PUT http://localhost:8080/api/reviews/4/approve?user_id=1 # use existing review ID and user ID (of the author)
+curl --request PUT 'http://localhost:8080/api/reviews/4/approve?user_id=1' # use existing review ID and user ID (of the author)
 ```
 
-However, users can approve the same review multiple times (which is a limitation of the current implementation):
+However, users can approve the same review multiple times. This is a known limitation of the current
+implementation: The system only counts approvals and never records *who* approved, and without
+authentication the approver id is client-asserted anyway. The fix — recording approvers in a
+`review_approvals` table with a unique `(review_id, user_id)` constraint — is tracked as `TODO(auth)`
+in `ReviewServiceImpl` and lands together with authentication/authorization (see
+[Scope](#scope-no-authentication-yet)):
 ```shell
-curl --request PUT http://localhost:8080/api/reviews/4/approve?user_id=2 # use existing review ID and user ID (different from author)
+curl --request PUT 'http://localhost:8080/api/reviews/4/approve?user_id=2' # use existing review ID and user ID (different from author)
 ```
 ```shell
-curl --request PUT http://localhost:8080/api/reviews/4/approve?user_id=2 # use existing review ID and user ID (different from author)
+curl --request PUT 'http://localhost:8080/api/reviews/4/approve?user_id=2' # use existing review ID and user ID (different from author)
 ```
 ```shell
-curl --request PUT http://localhost:8080/api/reviews/4/approve?user_id=2 # use existing review ID and user ID (different from author)
+curl --request PUT 'http://localhost:8080/api/reviews/4/approve?user_id=2' # use existing review ID and user ID (different from author)
 ```
 
 ## Docker

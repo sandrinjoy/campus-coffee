@@ -10,7 +10,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
-import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.mock
@@ -49,10 +48,12 @@ class PosServiceTest {
 
     @Test
     fun `getById propagates NotFoundException from the data service`() {
-        whenever(posDataService.getById(anyLong())).thenThrow(NotFoundException(Pos::class.java, 1L))
+        // a literal id, not a matcher: the service under test is a real object, and passing a matcher
+        // as a method argument corrupts Mockito's matcher stack
+        whenever(posDataService.getById(1L)).thenThrow(NotFoundException(Pos::class.java, 1L))
 
-        assertThrows<NotFoundException> { posService.getById(anyLong()) }
-        verify(posDataService).getById(anyLong())
+        assertThrows<NotFoundException> { posService.getById(1L) }
+        verify(posDataService).getById(1L)
     }
 
     @Test

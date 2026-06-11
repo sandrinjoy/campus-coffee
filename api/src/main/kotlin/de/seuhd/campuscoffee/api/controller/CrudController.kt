@@ -1,5 +1,6 @@
 package de.seuhd.campuscoffee.api.controller
 
+import de.seuhd.campuscoffee.api.config.ApiPathConfig
 import de.seuhd.campuscoffee.api.dtos.Dto
 import de.seuhd.campuscoffee.api.mapper.DtoMapper
 import de.seuhd.campuscoffee.domain.model.objects.DomainModel
@@ -30,8 +31,14 @@ abstract class CrudController<DOMAIN : DomainModel<ID>, DTO : Dto<ID>, ID : Any>
     /** Retrieves a single resource by ID. */
     open fun getById(id: ID): ResponseEntity<DTO> = ResponseEntity.ok(mapper().fromDomain(service().getById(id)))
 
-    /** Creates a new resource and returns 201 Created with its location. */
+    /**
+     * Creates a new resource and returns 201 Created with its location.
+     *
+     * @throws IllegalArgumentException if the DTO carries an ID (the server assigns IDs; accepting one
+     *   would silently turn the create into an update of an existing resource)
+     */
     open fun create(dto: DTO): ResponseEntity<DTO> {
+        require(dto.id == null) { "ID must not be set when creating a new resource." }
         val created = upsert(dto)
         return ResponseEntity.created(getLocation(created.persistedId)).body(created)
     }
@@ -58,10 +65,34 @@ abstract class CrudController<DOMAIN : DomainModel<ID>, DTO : Dto<ID>, ID : Any>
     /** Upserts a resource: maps DTO to domain, calls the service, and maps the result back to a DTO. */
     protected fun upsert(dto: DTO): DTO = mapper().fromDomain(service().upsert(mapper().toDomain(dto)))
 
-    /** Builds the location URI for a newly created resource, used in the 201 Created response. */
+    /**
+     * Builds the location URI for a newly created resource, used in the 201 Created response. Only
+     * correct when the current request is the resource collection URL (the plain create case); other
+     * endpoints must use the [getLocation] overload with an explicit collection path.
+     */
     protected fun getLocation(resourceId: ID): URI =
         ServletUriComponentsBuilder
             .fromCurrentRequest()
+            .path("/{id}")
+            .buildAndExpand(resourceId)
+            .toUri()
+
+    /**
+     * Builds the location URI for a created resource without relying on the current request's URL.
+     * The single-argument [getLocation] appends `/{id}` to the current request URL, which is only
+     * correct when that URL is the collection URL; an endpoint like the OSM import
+     * (`POST /pos/import/osm/{nodeId}`) must instead state where the created resource actually
+     * lives. The URI is assembled from the server root, the API base path, the given collection
+     * path (e.g., `"/pos"`), and the resource id.
+     */
+    protected fun getLocation(
+        collectionPath: String,
+        resourceId: ID
+    ): URI =
+        ServletUriComponentsBuilder
+            .fromCurrentContextPath()
+            .path(ApiPathConfig.API_BASE_PATH)
+            .path(collectionPath)
             .path("/{id}")
             .buildAndExpand(resourceId)
             .toUri()

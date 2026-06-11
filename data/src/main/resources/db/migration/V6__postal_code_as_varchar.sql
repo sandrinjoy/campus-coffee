@@ -1,0 +1,15 @@
+-- German postal codes are fixed five-digit strings with significant leading zeros (e.g., 01067 in
+-- Dresden); the previous int column silently dropped them. Existing values are re-padded to five digits.
+
+-- Guard first: lpad() silently right-truncates values longer than five digits, so out-of-range rows
+-- (impossible through the application, which has always validated the range, but writable via raw SQL)
+-- must fail the migration loudly instead of being corrupted.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pos WHERE postal_code < 0 OR postal_code > 99999) THEN
+        RAISE EXCEPTION 'pos.postal_code contains values outside 0..99999; clean them up before migrating';
+    END IF;
+END $$;
+
+ALTER TABLE pos ALTER COLUMN postal_code TYPE varchar(5) USING lpad(postal_code::text, 5, '0');
+ALTER TABLE pos ADD CONSTRAINT ck_pos_postal_code CHECK (postal_code ~ '^[0-9]{5}$');
