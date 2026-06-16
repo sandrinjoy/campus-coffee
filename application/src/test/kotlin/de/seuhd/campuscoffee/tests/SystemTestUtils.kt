@@ -29,10 +29,17 @@ object SystemTestUtils {
     fun client(): RestTestClient = client
 
     /** Creates a PostgreSQL testcontainer. */
+    // The container is AutoCloseable but deliberately not closed here: callers keep it open for the whole
+    // test run and Testcontainers tears it down on JVM shutdown, so suppress the resource leak inspection.
     @Suppress("resource")
     fun getPostgresContainer(): PostgreSQLContainer<*> =
-        // PostgreSQLContainer's self-type is its own type parameter, so the fluent withX setters cannot be
-        // chained on a <Nothing> instance; the default test credentials are read back via the dynamic properties.
+        // PostgreSQLContainer is a Java class whose type parameter refers back to itself
+        // (PostgreSQLContainer<SELF extends PostgreSQLContainer<SELF>>). Testcontainers uses this so the
+        // fluent withX() setters return the concrete subclass type, letting them chain across the class
+        // hierarchy. Kotlin cannot express that self-reference, so we pass Nothing as the type argument; this
+        // is the standard way to use Testcontainers from Kotlin. We don't set a custom username/password here
+        // and rely on Testcontainers' defaults, which configurePostgresContainers() (below) hands to Spring as
+        // the datasource URL, username, and password.
         PostgreSQLContainer<Nothing>(DockerImageName.parse("postgres:17-alpine"))
 
     /** Points the Spring datasource at the given PostgreSQL testcontainer. */

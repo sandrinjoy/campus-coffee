@@ -66,12 +66,11 @@ abstract class AbstractSystemTest {
     }
 
     protected companion object {
-        // One container shared across all system tests: a companion-object val is a single instance
-        // initialized once, so it is already shared without @JvmStatic.
+        // Shared across all system tests: a val in the companion object is a single instance, started once.
         protected val postgresContainer: PostgreSQLContainer<*> = getPostgresContainer().apply { start() }
 
-        // Spring only invokes @DynamicPropertySource on a static method; @JvmStatic turns this
-        // companion function into a real JVM static so the container's JDBC settings reach the context.
+        // Spring only invokes @DynamicPropertySource on a static method; @JvmStatic makes this
+        // companion function a real JVM static so the Postgres container's JDBC settings reach the Spring context.
         @JvmStatic
         @DynamicPropertySource
         fun configureProperties(registry: DynamicPropertyRegistry) {
