@@ -24,18 +24,39 @@ import org.springframework.web.bind.annotation.RequestMapping
 @Tag(name = "Authentication", description = "Exchange credentials for a stateless JWT bearer token.")
 @Controller
 @RequestMapping("/auth")
-class AuthController {
-    @Operation(summary = "Authenticate and return a JWT bearer token (not yet implemented).")
+class AuthController(
+    private val authenticationManager: org.springframework.security.authentication.AuthenticationManager,
+    private val jwtEncoder: org.springframework.security.oauth2.jwt.JwtEncoder
+) {
+    @Operation(summary = "Authenticate and return a JWT bearer token.")
     @PostMapping("/token")
     fun token(
         @RequestBody
         @Valid request: TokenRequestDto
     ): ResponseEntity<TokenResponseDto> {
-        log.info("Token requested for login name '{}' (endpoint not yet implemented).", request.loginName)
-        // TODO (Exercise 4): authenticate the credentials via the AuthenticationManager and build a JWT
-        //  (subject = login name, a `roles` claim, a 15-minute expiry) with the provided JwtEncoder,
-        //  returning 200 OK with the token. Until then the endpoint advertises itself as unimplemented.
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build()
+        log.info("Token requested for login name '{}'.", request.loginName)
+        
+        val authentication = authenticationManager.authenticate(
+            org.springframework.security.authentication.UsernamePasswordAuthenticationToken(request.loginName, request.password)
+        )
+        
+        val now = java.time.Instant.now()
+        val expiry = now.plusSeconds(15 * 60) // 15 minutes
+        
+        val roles = authentication.authorities.mapNotNull { it.authority?.removePrefix("ROLE_") }
+        
+        val claims = org.springframework.security.oauth2.jwt.JwtClaimsSet.builder()
+            .subject(authentication.name)
+            .claim("roles", roles)
+            .issuedAt(now)
+            .expiresAt(expiry)
+            .build()
+            
+        val headers = org.springframework.security.oauth2.jwt.JwsHeader.with(org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS256).build()
+        val parameters = org.springframework.security.oauth2.jwt.JwtEncoderParameters.from(headers, claims)
+        val token = jwtEncoder.encode(parameters).tokenValue
+        
+        return ResponseEntity.ok(TokenResponseDto(token))
     }
 
     private companion object {

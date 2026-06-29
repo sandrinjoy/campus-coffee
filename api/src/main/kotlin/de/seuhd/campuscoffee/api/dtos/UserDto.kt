@@ -3,6 +3,7 @@ package de.seuhd.campuscoffee.api.dtos
 import com.fasterxml.jackson.annotation.JsonProperty
 import de.seuhd.campuscoffee.domain.model.objects.Role
 import jakarta.validation.constraints.Email
+import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
@@ -36,9 +37,8 @@ data class UserDto(
     @field:NotNull
     @field:Size(min = 1, max = 255, message = "Last name must be between 1 and 255 characters long.")
     val lastName: String?,
-    // TODO (Exercise 1): make the password required and at least 8 characters (firstName and lastName
-    //  above show the bean-validation pattern to follow).
-    @field:JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @field:NotBlank(groups = [OnCreate::class])
+    @field:Size(min = 8, message = "Password must be at least 8 characters long.")
     val password: String? = null,
     val roles: Set<Role>? = null
 ) : Dto<Long>

@@ -25,10 +25,11 @@ class ReviewSystemTests : AbstractSystemTest() {
         val pos = createPos()
         val author = createUser("author", "author@uni-heidelberg.de")
 
-        val created =
+        val created = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, author, "Solid espresso and plenty of seating.")))
                 .first()
+        }
 
         assertThat(created.approved).isFalse()
     }
@@ -37,10 +38,11 @@ class ReviewSystemTests : AbstractSystemTest() {
     fun `listing reviews and fetching one by id return the created review`() {
         val pos = createPos()
         val author = createUser("author", "author@uni-heidelberg.de")
-        val created =
+        val created = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, author, "A reliable spot between lectures.")))
                 .first()
+        }
 
         assertThat(reviewRequests.retrieveAll().map { it.id }).containsExactly(created.id)
 
@@ -52,15 +54,17 @@ class ReviewSystemTests : AbstractSystemTest() {
     fun `updating a review changes its text`() {
         val pos = createPos()
         val author = createUser("author", "author@uni-heidelberg.de")
-        val created =
+        val created = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, author, "Original review text, long enough.")))
                 .first()
+        }
 
-        val updated =
+        val updated = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
-                .update(listOf(created.copy(review = "Updated review text, also long enough.")))
+                .update(listOf(created.copy(authorId = null, review = "Updated review text, also long enough.")))
                 .first()
+        }
 
         assertThat(updated.review).isEqualTo("Updated review text, also long enough.")
         assertThat(reviewRequests.retrieveById(created.id!!).review)
@@ -75,18 +79,20 @@ class ReviewSystemTests : AbstractSystemTest() {
         val approvers =
             (1..approvalConfiguration.minCount)
                 .map { createUser("approver_$it", "approver$it@uni-heidelberg.de") }
-        val created =
+        val created = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, author, "Review text before the update.")))
                 .first()
-        approvers.forEach { reviewRequests.approve(created.id!!, it.id!!) }
+        }
+        approvers.forEach { reviewRequests.approve(created.id!!, it.loginName, "password123") }
         assertThat(reviewRequests.retrieveById(created.id!!).approved).isTrue()
 
         // approvals are managed by the approval workflow; a text edit must not erase them
-        val updated =
+        val updated = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
-                .update(listOf(created.copy(review = "Review text after the update.")))
+                .update(listOf(created.copy(authorId = null, review = "Review text after the update.")))
                 .first()
+        }
 
         assertThat(updated.review).isEqualTo("Review text after the update.")
         assertThat(updated.approved).isTrue()
@@ -101,22 +107,25 @@ class ReviewSystemTests : AbstractSystemTest() {
                 TestFixtures.getPosFixturesForInsertion().last().copy(name = "Second POS for the move test")
             )
         val author = createUser("author", "author@uni-heidelberg.de")
-        val reviewOnFirstPos =
+        val reviewOnFirstPos = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(firstPos, author, "Review for the first POS.")))
                 .first()
-        val reviewOnSecondPos =
+        }
+        val reviewOnSecondPos = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(secondPos, author, "Review for the second POS.")))
                 .first()
+        }
 
         // a review's POS and author are fixed at creation: re-pointing the second review at the first
         // POS would yield two reviews by the same author and carry approvals to the wrong POS
-        val movedReview = reviewOnSecondPos.copy(posId = firstPos.id)
-        val statusCode =
+        val movedReview = reviewOnSecondPos.copy(authorId = null, posId = firstPos.id)
+        val statusCode = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .updateAndReturnStatusCodes(listOf(movedReview))
                 .first()
+        }
 
         assertThat(statusCode).isEqualTo(HttpStatus.BAD_REQUEST.value())
         // both reviews still point at their original POS
@@ -128,15 +137,18 @@ class ReviewSystemTests : AbstractSystemTest() {
     fun `updating a review that does not exist returns 404 Not Found`() {
         val pos = createPos()
         val author = createUser("author", "author@uni-heidelberg.de")
-        val existing =
+        val existing = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, author, "The author's only review, long enough.")))
                 .first()
+        }
 
         // unknown id, but the same author/POS pair as the existing review: the missing id must win
         // (404), not the duplicate rule (409)
-        val ghost = existing.copy(id = 9999L)
-        val statusCode = reviewRequests.updateAndReturnStatusCodes(listOf(ghost)).first()
+        val ghost = existing.copy(id = 9999L, authorId = null)
+        val statusCode = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
+            reviewRequests.updateAndReturnStatusCodes(listOf(ghost)).first()
+        }
 
         assertThat(statusCode).isEqualTo(HttpStatus.NOT_FOUND.value())
     }
@@ -145,13 +157,16 @@ class ReviewSystemTests : AbstractSystemTest() {
     fun `deleting a review twice returns 204 No Content then 404 Not Found`() {
         val pos = createPos()
         val author = createUser("author", "author@uni-heidelberg.de")
-        val created =
+        val created = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, author, "This review will be deleted.")))
                 .first()
+        }
         val id = requireNotNull(created.id)
 
-        val statusCodes = reviewRequests.deleteAndReturnStatusCodes(listOf(id, id))
+        val statusCodes = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
+            reviewRequests.deleteAndReturnStatusCodes(listOf(id, id))
+        }
 
         // the first delete returns 204 No Content, the second 404 Not Found
         assertThat(statusCodes).containsExactly(HttpStatus.NO_CONTENT.value(), HttpStatus.NOT_FOUND.value())
@@ -163,13 +178,14 @@ class ReviewSystemTests : AbstractSystemTest() {
         val author = createUser("author", "author@uni-heidelberg.de")
         val firstApprover = createUser("approver_one", "approver.one@uni-heidelberg.de")
         val secondApprover = createUser("approver_two", "approver.two@uni-heidelberg.de")
-        val review =
+        val review = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, author, "Review that stays below the quorum.")))
                 .first()
+        }
 
-        reviewRequests.approve(review.id!!, firstApprover.id!!)
-        val afterTwoApprovals = reviewRequests.approve(review.id!!, secondApprover.id!!)
+        reviewRequests.approve(review.id!!, firstApprover.loginName, "password123")
+        val afterTwoApprovals = reviewRequests.approve(review.id!!, secondApprover.loginName, "password123")
 
         assertThat(afterTwoApprovals.approved).isFalse()
     }
@@ -181,14 +197,15 @@ class ReviewSystemTests : AbstractSystemTest() {
         val firstApprover = createUser("approver_one", "approver.one@uni-heidelberg.de")
         val secondApprover = createUser("approver_two", "approver.two@uni-heidelberg.de")
         val thirdApprover = createUser("approver_three", "approver.three@uni-heidelberg.de")
-        val review =
+        val review = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, author, "Review that reaches the quorum.")))
                 .first()
+        }
 
-        reviewRequests.approve(review.id!!, firstApprover.id!!)
-        reviewRequests.approve(review.id!!, secondApprover.id!!)
-        val afterThreeApprovals = reviewRequests.approve(review.id!!, thirdApprover.id!!)
+        reviewRequests.approve(review.id!!, firstApprover.loginName, "password123")
+        reviewRequests.approve(review.id!!, secondApprover.loginName, "password123")
+        val afterThreeApprovals = reviewRequests.approve(review.id!!, thirdApprover.loginName, "password123")
 
         assertThat(afterThreeApprovals.approved).isTrue()
     }
@@ -197,12 +214,13 @@ class ReviewSystemTests : AbstractSystemTest() {
     fun `approving your own review returns 400 Bad Request`() {
         val pos = createPos()
         val author = createUser("author", "author@uni-heidelberg.de")
-        val review =
+        val review = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, author, "Author tries to approve this review.")))
                 .first()
+        }
 
-        val statusCode = reviewRequests.approveAndReturnStatusCode(review.id!!, author.id!!)
+        val statusCode = reviewRequests.approveAndReturnStatusCode(review.id!!, author.loginName, "password123")
 
         assertThat(statusCode).isEqualTo(HttpStatus.BAD_REQUEST.value())
     }
@@ -211,14 +229,17 @@ class ReviewSystemTests : AbstractSystemTest() {
     fun `creating a second review by the same author for a POS returns 409 Conflict`() {
         val pos = createPos()
         val author = createUser("author", "author@uni-heidelberg.de")
-        reviewRequests.create(listOf(reviewFor(pos, author, "First review by this author.")))
+        de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
+            reviewRequests.create(listOf(reviewFor(pos, author, "First review by this author.")))
+        }
 
         // a duplicate is a conflict (the same status the uq_reviews_pos_author constraint produces
         // when two concurrent creates race past the application-level check)
-        val statusCode =
+        val statusCode = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(author.loginName, "password123") {
             reviewRequests
                 .createAndReturnStatusCodes(listOf(reviewFor(pos, author, "Second review by the same author.")))
                 .first()
+        }
 
         assertThat(statusCode).isEqualTo(HttpStatus.CONFLICT.value())
     }
@@ -227,7 +248,7 @@ class ReviewSystemTests : AbstractSystemTest() {
     fun `approving a missing review returns 404 Not Found`() {
         val approver = createUser("approver", "approver@uni-heidelberg.de")
 
-        val statusCode = reviewRequests.approveAndReturnStatusCode(9999L, approver.id!!)
+        val statusCode = reviewRequests.approveAndReturnStatusCode(9999L, approver.loginName, "password123")
 
         assertThat(statusCode).isEqualTo(HttpStatus.NOT_FOUND.value())
     }
@@ -241,18 +262,20 @@ class ReviewSystemTests : AbstractSystemTest() {
         val secondApprover = createUser("approver_two", "approver.two@uni-heidelberg.de")
         val thirdApprover = createUser("approver_three", "approver.three@uni-heidelberg.de")
 
-        val approvedReview =
+        val approvedReview = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(approvedAuthor.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, approvedAuthor, "This review reaches the quorum.")))
                 .first()
-        val pendingReview =
+        }
+        val pendingReview = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(pendingAuthor.loginName, "password123") {
             reviewRequests
                 .create(listOf(reviewFor(pos, pendingAuthor, "This review stays below the quorum.")))
                 .first()
+        }
 
-        reviewRequests.approve(approvedReview.id!!, firstApprover.id!!)
-        reviewRequests.approve(approvedReview.id!!, secondApprover.id!!)
-        reviewRequests.approve(approvedReview.id!!, thirdApprover.id!!)
+        reviewRequests.approve(approvedReview.id!!, firstApprover.loginName, "password123")
+        reviewRequests.approve(approvedReview.id!!, secondApprover.loginName, "password123")
+        reviewRequests.approve(approvedReview.id!!, thirdApprover.loginName, "password123")
 
         val posId = requireNotNull(pos.id)
         val approved = reviewRequests.retrieveByFilter(mapOf("pos_id" to posId, "approved" to true))
@@ -271,12 +294,12 @@ class ReviewSystemTests : AbstractSystemTest() {
         emailAddress: String
     ): User =
         userService.upsert(
-            User(loginName = loginName, emailAddress = emailAddress, firstName = "First", lastName = "Last")
+            User(loginName = loginName, emailAddress = emailAddress, firstName = "First", lastName = "Last", password = "password123")
         )
 
     private fun reviewFor(
         pos: Pos,
         author: User,
         text: String
-    ): ReviewDto = ReviewDto(posId = pos.id, authorId = author.id, review = text)
+    ): ReviewDto = ReviewDto(posId = pos.id, authorId = null, review = text)
 }

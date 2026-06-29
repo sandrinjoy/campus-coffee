@@ -24,5 +24,9 @@ class CurrentUserProvider(
      *  through the injected [UserService]. Throw if there is no authenticated user (the security filter
      *  chain should already have rejected such a request with 401 before it reaches here).
      */
-    fun currentUser(): User = TODO("Exercise 2: resolve the authenticated principal to a domain User")
+    fun currentUser(): User {
+        val authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().authentication
+        require(authentication != null && authentication.isAuthenticated) { "No authenticated user found" }
+        return userService.getByLoginName(authentication.name)
+    }
 }

@@ -14,7 +14,7 @@ import org.springframework.http.HttpStatus
 class UsersSystemTests : AbstractSystemTest() {
     @Test
     fun `creating a user returns it with the same field values`() {
-        val userToCreate = TestFixtures.getUserFixturesForInsertion().first()
+        val userToCreate = TestFixtures.getUserFixturesForInsertion().first { it.roles == setOf(de.seuhd.campuscoffee.domain.model.objects.Role.USER) }
         val createdUser =
             userDtoMapper.toDomain(
                 userRequests.create(listOf(userDtoMapper.fromDomain(userToCreate))).first()
@@ -37,32 +37,47 @@ class UsersSystemTests : AbstractSystemTest() {
     @Test
     fun `listing all users returns every created entry`() {
         val createdUserList = TestFixtures.createUserFixtures(userService)
+        val creds = TestFixtures.rawCredentialsFor(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN)
 
-        val retrievedUsers = userRequests.retrieveAll().map(userDtoMapper::toDomain)
+        val retrievedUsers = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(creds.first, creds.second) {
+            userRequests.retrieveAll()
+                .filter { it.loginName != "moderator" && it.loginName != "admin" }
+                .map(userDtoMapper::toDomain)
+        }
 
         assertEqualsIgnoringTimestamps(retrievedUsers, createdUserList)
     }
 
     @Test
     fun `fetching a user by id returns it`() {
-        val createdUser = TestFixtures.createUserFixtures(userService).first()
+        val createdUsers = TestFixtures.createUserFixtures(userService)
+        val createdUser = createdUsers.first { it.roles.contains(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN) }
+        val creds = TestFixtures.rawCredentialsFor(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN)
 
-        val retrievedUser = userDtoMapper.toDomain(userRequests.retrieveById(createdUser.id!!))
+        val retrievedUser = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(creds.first, creds.second) {
+            userDtoMapper.toDomain(userRequests.retrieveById(createdUser.id!!))
+        }
 
         assertEqualsIgnoringTimestamps(retrievedUser, createdUser)
     }
 
     @Test
     fun `filtering users by login name returns the matching user`() {
-        val createdUser = TestFixtures.createUserFixtures(userService).first()
-        val filteredUser = userDtoMapper.toDomain(userRequests.retrieveByFilter("login_name", createdUser.loginName))
+        val createdUsers = TestFixtures.createUserFixtures(userService)
+        val createdUser = createdUsers.first { it.roles.contains(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN) }
+        val creds = TestFixtures.rawCredentialsFor(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN)
+
+        val filteredUser = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(creds.first, creds.second) {
+            userDtoMapper.toDomain(userRequests.retrieveByFilter("login_name", createdUser.loginName))
+        }
 
         assertEqualsIgnoringTimestamps(filteredUser, createdUser)
     }
 
     @Test
     fun `updating a user changes its fields and persists them`() {
-        val original = TestFixtures.createUserFixtures(userService).first()
+        val createdUsers = TestFixtures.createUserFixtures(userService)
+        val original = createdUsers.first { it.roles == setOf(de.seuhd.campuscoffee.domain.model.objects.Role.USER) } // student2023
 
         val userToUpdate =
             original.copy(
@@ -70,28 +85,40 @@ class UsersSystemTests : AbstractSystemTest() {
                 emailAddress = "updated." + original.emailAddress
             )
 
-        val updatedUser =
+        val creds = TestFixtures.rawCredentialsFor(de.seuhd.campuscoffee.domain.model.objects.Role.USER)
+
+        val updatedUser = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(creds.first, creds.second) {
             userDtoMapper.toDomain(
                 userRequests.update(listOf(userDtoMapper.fromDomain(userToUpdate))).first()
             )
+        }
         assertEqualsIgnoringTimestamps(updatedUser, userToUpdate)
 
         // verify changes persist
-        val retrievedUser = userDtoMapper.toDomain(userRequests.retrieveById(userToUpdate.id!!))
+        val retrievedUser = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(userToUpdate.loginName!!, creds.second) {
+            userDtoMapper.toDomain(userRequests.retrieveById(userToUpdate.id!!))
+        }
         assertEqualsIgnoringTimestamps(retrievedUser, userToUpdate)
     }
 
     @Test
     fun `deleting a user twice returns 204 No Content then 404 Not Found`() {
-        val userToDelete = TestFixtures.createUserFixtures(userService).first()
+        val createdUsers = TestFixtures.createUserFixtures(userService)
+        val userToDelete = createdUsers.first { !it.roles.contains(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN) }
         val id = requireNotNull(userToDelete.id)
 
-        val statusCodes = userRequests.deleteAndReturnStatusCodes(listOf(id, id))
+        val adminCreds = TestFixtures.rawCredentialsFor(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN)
+
+        val statusCodes = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(adminCreds.first, adminCreds.second) {
+            userRequests.deleteAndReturnStatusCodes(listOf(id, id))
+        }
 
         // the first deletion returns 204 No Content, the second 404 Not Found
         assertThat(statusCodes).containsExactly(HttpStatus.NO_CONTENT.value(), HttpStatus.NOT_FOUND.value())
 
-        val remainingUserIds: List<Long?> = userRequests.retrieveAll().map { it.id }
+        val remainingUserIds: List<Long?> = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(adminCreds.first, adminCreds.second) {
+            userRequests.retrieveAll().map { it.id }
+        }
         assertThat(remainingUserIds).doesNotContain(id)
     }
 }

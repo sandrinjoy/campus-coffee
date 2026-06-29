@@ -6,6 +6,7 @@ import de.seuhd.campuscoffee.tests.SystemTestUtils.client
 import de.seuhd.campuscoffee.tests.SystemTestUtils.posRequests
 import de.seuhd.campuscoffee.tests.SystemTestUtils.reviewRequests
 import de.seuhd.campuscoffee.tests.SystemTestUtils.userRequests
+import de.seuhd.campuscoffee.tests.SystemTestUtils.withAuth
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
@@ -63,30 +64,47 @@ class ErrorPathSystemTests : AbstractSystemTest() {
             userRequests
                 .create(listOf(userDtoMapper.fromDomain(TestFixtures.getUserFixturesForInsertion().first())))
                 .first()
-        reviewRequests.create(
-            listOf(ReviewDto(posId = pos.id, authorId = user.id, review = "A review that blocks deletion."))
-        )
+
+        val review = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(user.loginName!!, "aaaMbnPdFYDqkOpS3fVA") {
+            reviewRequests.create(
+                listOf(ReviewDto(posId = pos.id, authorId = null, review = "A review that blocks deletion."))
+            ).first()
+        }
 
         // the review references both, so deleting either parent is a conflict, not a 500
         assertThat(posRequests.deleteAndReturnStatusCodes(listOf(pos.id!!)).first())
             .isEqualTo(HttpStatus.CONFLICT.value())
-        assertThat(userRequests.deleteAndReturnStatusCodes(listOf(user.id!!)).first())
-            .isEqualTo(HttpStatus.CONFLICT.value())
+
+        // User deletion requires ADMIN credentials
+        val deleteUserStatus = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials("admin", "password123") {
+            userRequests.deleteAndReturnStatusCodes(listOf(user.id!!)).first()
+        }
+        assertThat(deleteUserStatus).isEqualTo(HttpStatus.CONFLICT.value())
     }
 
     @Test
     fun `fetching an unknown id returns 404 Not Found for POS, users, and reviews`() {
+        val user = userRequests.create(listOf(userDtoMapper.fromDomain(TestFixtures.getUserFixturesForInsertion().first()))).first()
+        // Admin user can view all users
+        val getStatus = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(user.loginName!!, "aaaMbnPdFYDqkOpS3fVA") {
+            userRequests.retrieveByIdStatusCode(MISSING_ID)
+        }
+
         assertThat(posRequests.retrieveByIdStatusCode(MISSING_ID)).isEqualTo(HttpStatus.NOT_FOUND.value())
-        assertThat(userRequests.retrieveByIdStatusCode(MISSING_ID)).isEqualTo(HttpStatus.NOT_FOUND.value())
+        assertThat(getStatus).isEqualTo(HttpStatus.NOT_FOUND.value())
         assertThat(reviewRequests.retrieveByIdStatusCode(MISSING_ID)).isEqualTo(HttpStatus.NOT_FOUND.value())
     }
 
     @Test
     fun `filtering by a value that matches nothing returns 404 Not Found`() {
+        val user = userRequests.create(listOf(userDtoMapper.fromDomain(TestFixtures.getUserFixturesForInsertion().first()))).first()
+        val filterStatus = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(user.loginName!!, "aaaMbnPdFYDqkOpS3fVA") {
+            userRequests.retrieveByFilterStatusCode("login_name", "no_such_login")
+        }
+
         assertThat(posRequests.retrieveByFilterStatusCode("name", "NoSuchPosName"))
             .isEqualTo(HttpStatus.NOT_FOUND.value())
-        assertThat(userRequests.retrieveByFilterStatusCode("login_name", "no_such_login"))
-            .isEqualTo(HttpStatus.NOT_FOUND.value())
+        assertThat(filterStatus).isEqualTo(HttpStatus.NOT_FOUND.value())
     }
 
     @Test
@@ -118,14 +136,16 @@ class ErrorPathSystemTests : AbstractSystemTest() {
         val invalid = posDtoMapper.fromDomain(TestFixtures.getPosFixturesForInsertion().first()).copy(city = "")
 
         // the validation handler names the rejected field in the message; assert the name, not the exact text
-        val result =
+        val result = de.seuhd.campuscoffee.tests.SystemTestUtils.run {
             client()
                 .post()
                 .uri("/api/pos")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(invalid)
+                .withAuth()
                 .exchange()
                 .returnResult<String>()
+        }
 
         assertThat(result.status.value()).isEqualTo(HttpStatus.BAD_REQUEST.value())
         assertThat(result.responseBody).contains("city")
@@ -136,14 +156,16 @@ class ErrorPathSystemTests : AbstractSystemTest() {
         // @Size alone treats null as valid; @NotBlank must reject a missing name as a 400, not a 500
         val invalid = posDtoMapper.fromDomain(TestFixtures.getPosFixturesForInsertion().first()).copy(name = null)
 
-        val result =
+        val result = de.seuhd.campuscoffee.tests.SystemTestUtils.run {
             client()
                 .post()
                 .uri("/api/pos")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(invalid)
+                .withAuth()
                 .exchange()
                 .returnResult<String>()
+        }
 
         assertThat(result.status.value()).isEqualTo(HttpStatus.BAD_REQUEST.value())
         assertThat(result.responseBody).contains("name")
@@ -151,35 +173,45 @@ class ErrorPathSystemTests : AbstractSystemTest() {
 
     @Test
     fun `creating a review with text that is too short returns 400 Bad Request`() {
-        // an empty review is rejected by bean validation; this pins the controller-to-400 mapping for a
-        // validation failure without depending on the exact length bounds
-        val invalid = ReviewDto(posId = 1L, authorId = 1L, review = "")
+        val user = userRequests.create(listOf(userDtoMapper.fromDomain(TestFixtures.getUserFixturesForInsertion().first()))).first()
+        val invalid = ReviewDto(posId = 1L, authorId = null, review = "")
 
-        assertThat(reviewRequests.createAndReturnStatusCodes(listOf(invalid)).first())
-            .isEqualTo(HttpStatus.BAD_REQUEST.value())
+        val statusCode = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(user.loginName!!, "aaaMbnPdFYDqkOpS3fVA") {
+            reviewRequests.createAndReturnStatusCodes(listOf(invalid)).first()
+        }
+
+        assertThat(statusCode).isEqualTo(HttpStatus.BAD_REQUEST.value())
     }
 
     @Test
-    fun `creating a review without a POS or author returns 400 Bad Request`() {
-        val missingPos = ReviewDto(posId = null, authorId = 1L, review = "Valid length review text.")
-        val missingAuthor = ReviewDto(posId = 1L, authorId = null, review = "Valid length review text.")
+    fun `creating a review without a POS or with an authorId returns 400 Bad Request`() {
+        val user = userRequests.create(listOf(userDtoMapper.fromDomain(TestFixtures.getUserFixturesForInsertion().first()))).first()
+        val missingPos = ReviewDto(posId = null, authorId = null, review = "Valid length review text.")
+        val withAuthor = ReviewDto(posId = 1L, authorId = 1L, review = "Valid length review text.")
 
-        assertThat(reviewRequests.createAndReturnStatusCodes(listOf(missingPos)).first())
-            .isEqualTo(HttpStatus.BAD_REQUEST.value())
-        assertThat(reviewRequests.createAndReturnStatusCodes(listOf(missingAuthor)).first())
-            .isEqualTo(HttpStatus.BAD_REQUEST.value())
+        val statusMissingPos = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(user.loginName!!, "aaaMbnPdFYDqkOpS3fVA") {
+            reviewRequests.createAndReturnStatusCodes(listOf(missingPos)).first()
+        }
+        val statusWithAuthor = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(user.loginName!!, "aaaMbnPdFYDqkOpS3fVA") {
+            reviewRequests.createAndReturnStatusCodes(listOf(withAuthor)).first()
+        }
+
+        assertThat(statusMissingPos).isEqualTo(HttpStatus.BAD_REQUEST.value())
+        assertThat(statusWithAuthor).isEqualTo(HttpStatus.BAD_REQUEST.value())
     }
 
     @Test
     fun `requesting an unmapped path returns 404 Not Found with a clean error body`() {
         // no controller maps this path, so it falls through to a NoResourceFoundException -> 404; the
         // handler renders it without leaking the framework wording ("No static resource ...") or class name
-        val result =
+        val result = de.seuhd.campuscoffee.tests.SystemTestUtils.run {
             client()
                 .get()
                 .uri("/api/this-endpoint-does-not-exist")
+                .withAuth()
                 .exchange()
                 .returnResult<String>()
+        }
 
         assertThat(result.status.value()).isEqualTo(HttpStatus.NOT_FOUND.value())
         val body = result.responseBody ?: ""

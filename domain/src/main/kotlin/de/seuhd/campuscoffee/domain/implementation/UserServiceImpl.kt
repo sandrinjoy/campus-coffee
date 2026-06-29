@@ -28,13 +28,50 @@ class UserServiceImpl(
     override fun upsert(domainObject: User): User {
         val raw = domainObject.password
         val id = domainObject.id
+
         val toUpsert =
             when {
                 raw != null -> domainObject.copy(passwordHash = passwordHasher.hash(raw), password = null)
                 id != null -> domainObject.copy(passwordHash = userDataService.getById(id).passwordHash)
-                else -> domainObject
+                else -> domainObject.copy()
             }
         return super.upsert(toUpsert)
+    }
+
+    override fun upsert(domainObject: User, actingUser: User): User {
+        if (domainObject.id != null) {
+            if (actingUser.id != domainObject.id && !actingUser.roles.contains(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN)) {
+                throw de.seuhd.campuscoffee.domain.exceptions.ForbiddenException("Cannot edit another user's profile.")
+            }
+            val existing = getById(domainObject.id)
+            if (domainObject.roles != existing.roles && !actingUser.roles.contains(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN)) {
+                throw de.seuhd.campuscoffee.domain.exceptions.ForbiddenException("Cannot change roles.")
+            }
+        }
+        return upsert(domainObject)
+    }
+
+    override fun getById(id: Long, actingUser: User): User {
+        val target = getById(id)
+        if (actingUser.id != target.id && !actingUser.roles.contains(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN)) {
+            throw de.seuhd.campuscoffee.domain.exceptions.ForbiddenException("Cannot read another user's profile.")
+        }
+        return target
+    }
+
+    override fun getByLoginName(loginName: String, actingUser: User): User {
+        val target = getByLoginName(loginName)
+        if (actingUser.id != target.id && !actingUser.roles.contains(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN)) {
+            throw de.seuhd.campuscoffee.domain.exceptions.ForbiddenException("Cannot read another user's profile.")
+        }
+        return target
+    }
+
+    override fun delete(id: Long, actingUser: User) {
+        if (!actingUser.roles.contains(de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN)) {
+            throw de.seuhd.campuscoffee.domain.exceptions.ForbiddenException("Only ADMIN can delete users.")
+        }
+        delete(id)
     }
 
     override fun getByLoginName(loginName: String): User {

@@ -34,7 +34,8 @@ import org.springframework.web.bind.annotation.RequestParam
 @RequestMapping("/users")
 class UserController(
     private val userService: UserService,
-    private val userDtoMapper: UserDtoMapper
+    private val userDtoMapper: UserDtoMapper,
+    private val currentUserProvider: de.seuhd.campuscoffee.api.security.CurrentUserProvider
 ) : CrudController<User, UserDto, Long>() {
     override fun service(): CrudService<User, Long> = userService
 
@@ -53,7 +54,11 @@ class UserController(
     override fun getById(
         @Parameter(description = "Unique identifier of the user to retrieve.", required = true)
         @PathVariable id: Long
-    ): ResponseEntity<UserDto> = super.getById(id)
+    ): ResponseEntity<UserDto> {
+        val actingUser = currentUserProvider.currentUser()
+        val user = userService.getById(id, actingUser)
+        return ResponseEntity.ok(userDtoMapper.fromDomain(user))
+    }
 
     @Operation
     @CrudOperation(operation = CREATE, resource = USER)
@@ -61,8 +66,13 @@ class UserController(
     override fun create(
         @Parameter(description = "Data of the user to create.", required = true)
         @RequestBody
-        @Valid dto: UserDto
-    ): ResponseEntity<UserDto> = super.create(dto)
+        @org.springframework.validation.annotation.Validated(de.seuhd.campuscoffee.api.dtos.OnCreate::class, jakarta.validation.groups.Default::class) dto: UserDto
+    ): ResponseEntity<UserDto> {
+        val registrationDto = dto.copy(roles = setOf(de.seuhd.campuscoffee.domain.model.objects.Role.USER))
+        val domain = userDtoMapper.toDomain(registrationDto)
+        val created = userService.upsert(domain)
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(userDtoMapper.fromDomain(created))
+    }
 
     @Operation
     @CrudOperation(operation = UPDATE, resource = USER)
@@ -72,8 +82,14 @@ class UserController(
         @PathVariable id: Long,
         @Parameter(description = "Data of the user to update.", required = true)
         @RequestBody
-        @Valid dto: UserDto
-    ): ResponseEntity<UserDto> = super.update(id, dto)
+        @org.springframework.validation.annotation.Validated dto: UserDto
+    ): ResponseEntity<UserDto> {
+        require(id == dto.id) { "ID in path and body do not match." }
+        val actingUser = currentUserProvider.currentUser()
+        val domain = userDtoMapper.toDomain(dto)
+        val updated = userService.upsert(domain, actingUser)
+        return ResponseEntity.ok(userDtoMapper.fromDomain(updated))
+    }
 
     @Operation
     @CrudOperation(operation = DELETE, resource = USER)
@@ -81,7 +97,11 @@ class UserController(
     override fun delete(
         @Parameter(description = "Unique identifier of the user to delete.", required = true)
         @PathVariable id: Long
-    ): ResponseEntity<Void> = super.delete(id)
+    ): ResponseEntity<Void> {
+        val actingUser = currentUserProvider.currentUser()
+        userService.delete(id, actingUser)
+        return ResponseEntity.noContent().build()
+    }
 
     @Operation
     @CrudOperation(operation = FILTER, resource = USER)
@@ -89,5 +109,9 @@ class UserController(
     fun filter(
         @Parameter(description = "Login name of the user to retrieve.", required = true)
         @RequestParam("login_name") loginName: String
-    ): ResponseEntity<UserDto> = ResponseEntity.ok(userDtoMapper.fromDomain(userService.getByLoginName(loginName)))
+    ): ResponseEntity<UserDto> {
+        val actingUser = currentUserProvider.currentUser()
+        val user = userService.getByLoginName(loginName, actingUser)
+        return ResponseEntity.ok(userDtoMapper.fromDomain(user))
+    }
 }

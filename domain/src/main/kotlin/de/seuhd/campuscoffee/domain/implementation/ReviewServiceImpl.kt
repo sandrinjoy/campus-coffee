@@ -22,7 +22,8 @@ class ReviewServiceImpl(
     private val reviewDataService: ReviewDataService,
     private val userDataService: UserDataService,
     private val posDataService: PosDataService,
-    private val approvalConfiguration: ApprovalConfiguration
+    private val approvalConfiguration: ApprovalConfiguration,
+    private val reviewApprovalDataService: de.seuhd.campuscoffee.domain.ports.data.ReviewApprovalDataService
 ) : CrudServiceImpl<Review, Long>(Review::class.java),
     ReviewService {
     override fun dataService(): CrudDataService<Review, Long> = reviewDataService
@@ -68,16 +69,32 @@ class ReviewServiceImpl(
         return super.upsert(reviewToUpsert)
     }
 
+    @Transactional
+    override fun upsert(domainObject: Review, actingUser: de.seuhd.campuscoffee.domain.model.objects.User): Review {
+        if (domainObject.id != null) {
+            val existing = reviewDataService.getById(domainObject.id)
+            if (existing.author.id != actingUser.id && !actingUser.roles.contains(de.seuhd.campuscoffee.domain.model.objects.Role.MODERATOR)) {
+                throw de.seuhd.campuscoffee.domain.exceptions.ForbiddenException("Only the review's author or a moderator may edit it.")
+            }
+        }
+        return upsert(domainObject)
+    }
+
+    @Transactional
+    override fun delete(id: Long, actingUser: de.seuhd.campuscoffee.domain.model.objects.User) {
+        val existing = reviewDataService.getById(id)
+        if (existing.author.id != actingUser.id && !actingUser.roles.contains(de.seuhd.campuscoffee.domain.model.objects.Role.MODERATOR)) {
+            throw de.seuhd.campuscoffee.domain.exceptions.ForbiddenException("Only the review's author or a moderator may delete it.")
+        }
+        delete(id)
+    }
+
     @Transactional(readOnly = true)
     override fun filter(
         posId: Long,
         approved: Boolean
     ): List<Review> = reviewDataService.filter(posDataService.getById(posId), approved)
 
-    // TODO (Exercise 5): record who approved in the provided review_approvals table (unique
-    //  (review_id, user_id) via ReviewApprovalDataService) so a user can approve a review at most once,
-    //  and derive approvalCount/approved from it; an anonymous count cannot enforce that. The approver
-    //  must come from the authenticated principal (Exercise 2), not the client-asserted userId below.
     @Transactional
     override fun approve(
         reviewId: Long,
@@ -109,8 +126,19 @@ class ReviewServiceImpl(
             )
         }
 
+        // Record the approval
+        reviewApprovalDataService.record(
+            de.seuhd.campuscoffee.domain.model.objects.ReviewApproval(
+                reviewId = reviewId,
+                userId = approverId
+            )
+        )
+
+        // Get the updated approval count from the recorded approvals in the database
+        val newApprovalCount = reviewApprovalDataService.countByReviewId(reviewId).toInt()
+
         // increment approval count on the freshly fetched review
-        val approvedReview = reviewToApprove.copy(approvalCount = reviewToApprove.approvalCount + 1)
+        val approvedReview = reviewToApprove.copy(approvalCount = newApprovalCount)
 
         // update approval status to determine if the review now reaches the approval quorum
         val finalReview = updateApprovalStatus(approvedReview)

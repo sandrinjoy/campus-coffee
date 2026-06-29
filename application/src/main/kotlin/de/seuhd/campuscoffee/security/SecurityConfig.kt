@@ -31,16 +31,23 @@ class SecurityConfig {
     ): SecurityFilterChain {
         http {
             authorizeHttpRequests {
-                // TODO (Exercise 1): require authentication on write operations (POST/PUT/DELETE), keeping
-                //  POS/review reads, registration (POST /users), and the Swagger / dev endpoints open. User
-                //  data is not public: listing users (GET /users) is admin-only and a single user (GET
-                //  /users/{id}, login-name filter) requires authentication; the finer self-or-admin rule for
-                //  one user depends on the target, so it is enforced in the domain in Exercise 2. The starter
-                //  leaves everything open so the app builds green with no auth enforced yet.
-                // TODO (Exercise 3): curating a POS (POST/PUT/DELETE `/pos`) requires the `MODERATOR` role,
-                //  and deleting a user (DELETE `/users/{id}`) requires `ADMIN`; add these rules before the
-                //  catch-all so they take precedence.
-                authorize(anyRequest, permitAll)
+                authorize(org.springframework.http.HttpMethod.GET, "/api/pos/**", permitAll)
+                authorize(org.springframework.http.HttpMethod.GET, "/api/reviews/**", permitAll)
+                authorize(org.springframework.http.HttpMethod.POST, "/api/users", permitAll)
+                authorize(org.springframework.http.HttpMethod.GET, "/api/users", hasAuthority("ROLE_ADMIN"))
+                
+                authorize("/api/api-docs/**", permitAll)
+                authorize("/api/swagger-ui/**", permitAll)
+                authorize("/api/swagger-ui.html", permitAll)
+                authorize("/v3/api-docs/**", permitAll)
+                authorize("/api/dev/**", permitAll)
+
+                authorize(org.springframework.http.HttpMethod.POST, "/api/pos/**", hasAuthority("ROLE_MODERATOR"))
+                authorize(org.springframework.http.HttpMethod.PUT, "/api/pos/**", hasAuthority("ROLE_MODERATOR"))
+                authorize(org.springframework.http.HttpMethod.DELETE, "/api/pos/**", hasAuthority("ROLE_MODERATOR"))
+                authorize(org.springframework.http.HttpMethod.DELETE, "/api/users/{id}", hasAuthority("ROLE_ADMIN"))
+
+                authorize(anyRequest, authenticated)
             }
             // Stateless API: no server-side session; the principal comes from the credentials on each request.
             csrf { disable() }
@@ -49,14 +56,26 @@ class SecurityConfig {
             httpBasic { }
             // Bearer-token (JWT) resource server. Harmless under permitAll: a missing or invalid token
             // leaves the request anonymous, which permitAll still allows.
-            // TODO (Exercise 4): add a JwtAuthenticationConverter that maps the token's `roles` claim to
-            //  `ROLE_*` authorities, so a Bearer principal carries the same authorities as a Basic one.
-            oauth2ResourceServer { jwt { } }
+            oauth2ResourceServer { 
+                jwt {
+                    jwtAuthenticationConverter = jwtAuthenticationConverter()
+                } 
+            }
             // Render an unauthenticated rejection as the application's JSON ErrorResponse (takes effect
             // once the chain requires authentication).
             exceptionHandling { this.authenticationEntryPoint = authenticationEntryPoint }
         }
         return http.build()
+    }
+
+    private fun jwtAuthenticationConverter(): org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter {
+        val grantedAuthoritiesConverter = org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter()
+        grantedAuthoritiesConverter.setAuthorityPrefix("ROLE_")
+        grantedAuthoritiesConverter.setAuthoritiesClaimName("roles")
+
+        val jwtAuthenticationConverter = org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter()
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter)
+        return jwtAuthenticationConverter
     }
 
     /** Delegating encoder ({bcrypt} by default); shared with the data layer's hashing semantics. */

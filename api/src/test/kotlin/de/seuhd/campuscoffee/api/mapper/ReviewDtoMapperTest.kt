@@ -19,11 +19,13 @@ class ReviewDtoMapperTest {
     private val mapper: ReviewDtoMapper = Mappers.getMapper(ReviewDtoMapper::class.java)
     private val posService: PosService = mock()
     private val userService: UserService = mock()
+    private val currentUserProvider: de.seuhd.campuscoffee.api.security.CurrentUserProvider = mock()
 
     @BeforeEach
     fun injectServices() {
         mapper.posService = posService
         mapper.userService = userService
+        mapper.currentUserProvider = currentUserProvider
     }
 
     @Test
@@ -31,7 +33,7 @@ class ReviewDtoMapperTest {
         val pos = TestFixtures.getPosFixtures().first()
         val author = TestFixtures.getUserFixtures().first()
         whenever(posService.getById(pos.id!!)).thenReturn(pos)
-        whenever(userService.getById(author.id!!)).thenReturn(author)
+        whenever(currentUserProvider.currentUser()).thenReturn(author)
         val dto =
             ReviewDto(
                 posId = pos.id,

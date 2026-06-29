@@ -22,4 +22,8 @@ interface UserService : CrudService<User, Long> {
      * @throws NotFoundException if no user exists with the given login name
      */
     fun getByLoginName(loginName: String): User
+    fun getByLoginName(loginName: String, actingUser: User): User
+    fun getById(id: Long, actingUser: User): User
+    fun upsert(domainObject: User, actingUser: User): User
+    fun delete(id: Long, actingUser: User)
 }

@@ -14,10 +14,6 @@ Until then, do not run the application on a publicly reachable host with real da
 demo (see [Deployment](#deployment)), restrict access — e.g., deploy to Cloud Run with
 `--no-allow-unauthenticated` — or treat the deployment as throwaway.
 
-The approval workflow inherits this gap: approvals are anonymous counts, so the same user can approve
-a review repeatedly (see [Approve reviews](#approve-reviews)). The rework, tracking approvers per user, only becomes meaningful once identity is trustworthy. It is
-therefore deferred to the same iteration and marked as `TODO (Exercise 5)` in `ReviewServiceImpl`.
-
 ## Prerequisites
 
 * Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) or a compatible open-source alternative such as [Rancher Desktop](https://rancherdesktop.io/).
@@ -259,21 +255,6 @@ Users cannot approve their own reviews:
 curl --request PUT 'http://localhost:8080/api/reviews/4/approve?user_id=1' # use existing review ID and user ID (of the author)
 ```
 
-However, users can approve the same review multiple times. This is a known limitation of the current
-implementation: The system only counts approvals and never records *who* approved, and without
-authentication the approver id is client-asserted anyway. The fix — recording approvers in a
-`review_approvals` table with a unique `(review_id, user_id)` constraint — is tracked as `TODO (Exercise 5)`
-in `ReviewServiceImpl` and lands together with authentication/authorization (see
-[Scope](#scope-no-authentication-yet)):
-```shell
-curl --request PUT 'http://localhost:8080/api/reviews/4/approve?user_id=2' # use existing review ID and user ID (different from author)
-```
-```shell
-curl --request PUT 'http://localhost:8080/api/reviews/4/approve?user_id=2' # use existing review ID and user ID (different from author)
-```
-```shell
-curl --request PUT 'http://localhost:8080/api/reviews/4/approve?user_id=2' # use existing review ID and user ID (different from author)
-```
 
 ## Docker
 

@@ -38,11 +38,14 @@ class ReviewServiceTest {
     @Mock
     private lateinit var posDataService: PosDataService
 
+    @Mock
+    private lateinit var reviewApprovalDataService: de.seuhd.campuscoffee.domain.ports.data.ReviewApprovalDataService
+
     private lateinit var reviewService: ReviewServiceImpl
 
     @BeforeEach
     fun beforeEach() {
-        reviewService = ReviewServiceImpl(reviewDataService, userDataService, posDataService, approvalConfiguration)
+        reviewService = ReviewServiceImpl(reviewDataService, userDataService, posDataService, approvalConfiguration, reviewApprovalDataService)
     }
 
     @Test
@@ -71,6 +74,7 @@ class ReviewServiceTest {
         whenever(userDataService.getById(userId)).thenReturn(user)
         val reviewId = requireNotNull(review.id)
         whenever(reviewDataService.getById(reviewId)).thenReturn(review)
+        whenever(reviewApprovalDataService.countByReviewId(reviewId)).thenReturn(review.approvalCount.toLong() + 1)
         whenever(reviewDataService.upsert(any<Review>())).thenAnswer { it.getArgument<Review>(0) }
 
         val approvedReview = reviewService.approve(reviewId, userId)
@@ -152,6 +156,7 @@ class ReviewServiceTest {
         val userId = requireNotNull(user.id)
         whenever(userDataService.getById(userId)).thenReturn(user)
         whenever(reviewDataService.getById(reviewId)).thenReturn(review)
+        whenever(reviewApprovalDataService.countByReviewId(reviewId)).thenReturn(1L)
         whenever(reviewDataService.upsert(any<Review>())).thenAnswer { it.getArgument<Review>(0) }
 
         val approvedReview = reviewService.approve(reviewId, userId)

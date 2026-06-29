@@ -1,8 +1,6 @@
 package de.seuhd.campuscoffee.tests.system
 
-import de.seuhd.campuscoffee.Application
 import de.seuhd.campuscoffee.api.mapper.PosDtoMapper
-import de.seuhd.campuscoffee.api.mapper.ReviewDtoMapper
 import de.seuhd.campuscoffee.api.mapper.UserDtoMapper
 import de.seuhd.campuscoffee.domain.ports.api.PosService
 import de.seuhd.campuscoffee.domain.ports.api.ReviewService
@@ -20,14 +18,14 @@ import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.containers.PostgreSQLContainer
 
 /**
- * Abstract base class for system tests. Sets up the Spring Boot test context, manages the PostgreSQL
- * testcontainer, and configures the [RestTestClient][de.seuhd.campuscoffee.tests.SystemTestUtils].
+ * Shared context for the system test suite: starts the Spring application on a random port and points
+ * it at a shared PostgreSQL testcontainer. The database schema is migrated on startup via Flyway.
  */
-@SpringBootTest(
-    classes = [Application::class],
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
-)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 abstract class AbstractSystemTest {
+    @LocalServerPort
+    protected var port: Int = 0
+
     @Autowired
     protected lateinit var posService: PosService
 
@@ -43,12 +41,6 @@ abstract class AbstractSystemTest {
     @Autowired
     protected lateinit var userDtoMapper: UserDtoMapper
 
-    @Autowired
-    protected lateinit var reviewDtoMapper: ReviewDtoMapper
-
-    @LocalServerPort
-    private var port: Int = 0
-
     @BeforeEach
     fun beforeEach() {
         // reviews reference POS and users via foreign keys, so they must be cleared first
@@ -56,6 +48,31 @@ abstract class AbstractSystemTest {
         posService.clear()
         userService.clear()
         configureClient(port)
+
+        // Insert default moderator
+        userService.upsert(
+            de.seuhd.campuscoffee.domain.model.objects.User(
+                loginName = "moderator",
+                emailAddress = "mod@campus.de",
+                firstName = "Mod",
+                lastName = "Erat",
+                roles = setOf(de.seuhd.campuscoffee.domain.model.objects.Role.USER, de.seuhd.campuscoffee.domain.model.objects.Role.MODERATOR),
+                password = "password123"
+            )
+        )
+        // Insert default admin
+        userService.upsert(
+            de.seuhd.campuscoffee.domain.model.objects.User(
+                loginName = "admin",
+                emailAddress = "admin@campus.de",
+                firstName = "Ad",
+                lastName = "Min",
+                roles = setOf(de.seuhd.campuscoffee.domain.model.objects.Role.USER, de.seuhd.campuscoffee.domain.model.objects.Role.ADMIN),
+                password = "password123"
+            )
+        )
+        // Reset credentials to default moderator
+        de.seuhd.campuscoffee.tests.SystemTestUtils.testCredentials = "moderator" to "password123"
     }
 
     @AfterEach
@@ -65,12 +82,10 @@ abstract class AbstractSystemTest {
         userService.clear()
     }
 
-    protected companion object {
-        // Shared across all system tests: a val in the companion object is a single instance, started once.
-        protected val postgresContainer: PostgreSQLContainer<*> = getPostgresContainer().apply { start() }
+    companion object {
+        // share one testcontainers instance across all system tests
+        private val postgresContainer: PostgreSQLContainer<*> = getPostgresContainer().apply { start() }
 
-        // Spring only invokes @DynamicPropertySource on a static method; @JvmStatic makes this
-        // companion function a real JVM static so the Postgres container's JDBC settings reach the Spring context.
         @JvmStatic
         @DynamicPropertySource
         fun configureProperties(registry: DynamicPropertyRegistry) {

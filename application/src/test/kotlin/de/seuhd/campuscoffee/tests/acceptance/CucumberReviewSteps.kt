@@ -41,7 +41,8 @@ class CucumberReviewSteps(
             loginName = row["loginName"],
             emailAddress = row["emailAddress"],
             firstName = row["firstName"],
-            lastName = row["lastName"]
+            lastName = row["lastName"],
+            password = "password123"
         )
 
     // Given -----------------------------------------------------------------------
@@ -84,7 +85,7 @@ class CucumberReviewSteps(
         posName: String
     ) {
         val review = reviewsByAuthorAndPos.getValue(reviewKey(authorLogin, posName))
-        val updated = reviewRequests.approve(review.id!!, usersByLogin.getValue(approverLogin).id!!)
+        val updated = reviewRequests.approve(review.id!!, approverLogin, "password123")
         reviewsByAuthorAndPos[reviewKey(authorLogin, posName)] = updated
     }
 
@@ -96,7 +97,7 @@ class CucumberReviewSteps(
     ) {
         val review = reviewsByAuthorAndPos.getValue(reviewKey(authorLogin, posName))
         lastApprovalStatusCode =
-            reviewRequests.approveAndReturnStatusCode(review.id!!, usersByLogin.getValue(approverLogin).id!!)
+            reviewRequests.approveAndReturnStatusCode(review.id!!, approverLogin, "password123")
     }
 
     // Then -----------------------------------------------------------------------
@@ -132,10 +133,12 @@ class CucumberReviewSteps(
         val review =
             ReviewDto(
                 posId = posByName.getValue(posName).id,
-                authorId = usersByLogin.getValue(login).id,
+                authorId = null,
                 review = text
             )
-        reviewsByAuthorAndPos[reviewKey(login, posName)] = reviewRequests.create(listOf(review)).first()
+        reviewsByAuthorAndPos[reviewKey(login, posName)] = de.seuhd.campuscoffee.tests.SystemTestUtils.withCredentials(login, "password123") {
+            reviewRequests.create(listOf(review)).first()
+        }
     }
 
     private fun currentReview(

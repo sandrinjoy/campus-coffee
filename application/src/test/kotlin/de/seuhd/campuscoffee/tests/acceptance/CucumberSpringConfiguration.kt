@@ -37,6 +37,20 @@ class CucumberSpringConfiguration(
         posService.clear()
         userService.clear()
         configureClient(port)
+
+        // Insert default moderator
+        userService.upsert(
+            de.seuhd.campuscoffee.domain.model.objects.User(
+                loginName = "moderator",
+                emailAddress = "mod@campus.de",
+                firstName = "Mod",
+                lastName = "Erat",
+                roles = setOf(de.seuhd.campuscoffee.domain.model.objects.Role.USER, de.seuhd.campuscoffee.domain.model.objects.Role.MODERATOR),
+                password = "password123"
+            )
+        )
+        // Reset credentials to default
+        de.seuhd.campuscoffee.tests.SystemTestUtils.testCredentials = "moderator" to "password123"
     }
 
     @After

@@ -8,6 +8,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import de.seuhd.campuscoffee.api.dtos.PosDto
 import de.seuhd.campuscoffee.domain.model.enums.PosType
 import de.seuhd.campuscoffee.tests.SystemTestUtils.client
+import de.seuhd.campuscoffee.tests.SystemTestUtils.withAuth
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeEach
@@ -39,12 +40,14 @@ class OsmImportSystemTests : AbstractSystemTest() {
             )
         )
 
-        val result =
+        val result = de.seuhd.campuscoffee.tests.SystemTestUtils.run {
             client()
                 .post()
                 .uri("/api/pos/import/osm/{nodeId}?campus_type={campus}", NODE_ID, "INF")
+                .withAuth()
                 .exchange()
                 .returnResult<PosDto>()
+        }
 
         assertThat(result.status.value()).isEqualTo(HttpStatus.CREATED.value())
         val imported = result.responseBody!!
@@ -68,25 +71,29 @@ class OsmImportSystemTests : AbstractSystemTest() {
             )
         )
 
-        val firstStatus =
+        val firstStatus = de.seuhd.campuscoffee.tests.SystemTestUtils.run {
             client()
                 .post()
                 .uri("/api/pos/import/osm/{nodeId}?campus_type={campus}", NODE_ID, "INF")
+                .withAuth()
                 .exchange()
                 .returnResult<ByteArray>()
                 .status
                 .value()
+        }
         assertThat(firstStatus).isEqualTo(HttpStatus.CREATED.value())
 
         // the second import hits the unique POS name; there is no update-by-import
-        val secondStatus =
+        val secondStatus = de.seuhd.campuscoffee.tests.SystemTestUtils.run {
             client()
                 .post()
                 .uri("/api/pos/import/osm/{nodeId}?campus_type={campus}", NODE_ID, "INF")
+                .withAuth()
                 .exchange()
                 .returnResult<ByteArray>()
                 .status
                 .value()
+        }
         assertThat(secondStatus).isEqualTo(HttpStatus.CONFLICT.value())
     }
 
@@ -97,14 +104,16 @@ class OsmImportSystemTests : AbstractSystemTest() {
                 .willReturn(aResponse().withStatus(HttpStatus.SERVICE_UNAVAILABLE.value()))
         )
 
-        val status =
+        val status = de.seuhd.campuscoffee.tests.SystemTestUtils.run {
             client()
                 .post()
                 .uri("/api/pos/import/osm/{nodeId}?campus_type={campus}", NODE_ID, "INF")
+                .withAuth()
                 .exchange()
                 .returnResult<ByteArray>()
                 .status
                 .value()
+        }
 
         assertThat(status).isEqualTo(HttpStatus.BAD_GATEWAY.value())
     }
@@ -115,14 +124,16 @@ class OsmImportSystemTests : AbstractSystemTest() {
             get(urlEqualTo("/node/$NODE_ID")).willReturn(aResponse().withStatus(HttpStatus.NOT_FOUND.value()))
         )
 
-        val status =
+        val status = de.seuhd.campuscoffee.tests.SystemTestUtils.run {
             client()
                 .post()
                 .uri("/api/pos/import/osm/{nodeId}?campus_type={campus}", NODE_ID, "INF")
+                .withAuth()
                 .exchange()
                 .returnResult<ByteArray>()
                 .status
                 .value()
+        }
 
         assertThat(status).isEqualTo(HttpStatus.NOT_FOUND.value())
     }
@@ -139,14 +150,16 @@ class OsmImportSystemTests : AbstractSystemTest() {
             )
         )
 
-        val status =
+        val status = de.seuhd.campuscoffee.tests.SystemTestUtils.run {
             client()
                 .post()
                 .uri("/api/pos/import/osm/{nodeId}?campus_type={campus}", NODE_ID, "INF")
+                .withAuth()
                 .exchange()
                 .returnResult<ByteArray>()
                 .status
                 .value()
+        }
 
         assertThat(status).isEqualTo(HttpStatus.BAD_REQUEST.value())
     }

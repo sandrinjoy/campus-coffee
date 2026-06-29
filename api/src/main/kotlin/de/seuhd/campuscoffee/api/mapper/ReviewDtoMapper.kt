@@ -25,6 +25,9 @@ abstract class ReviewDtoMapper : DtoMapper<Review, ReviewDto> {
     @Autowired
     internal lateinit var userService: UserService
 
+    @Autowired
+    internal lateinit var currentUserProvider: de.seuhd.campuscoffee.api.security.CurrentUserProvider
+
     @Mapping(target = "posId", source = "pos.id")
     @Mapping(target = "authorId", source = "author.id")
     abstract override fun fromDomain(source: Review): ReviewDto
@@ -44,7 +47,7 @@ abstract class ReviewDtoMapper : DtoMapper<Review, ReviewDto> {
             createdAt = source.createdAt,
             updatedAt = source.updatedAt,
             pos = posService.getById(source.posId!!),
-            author = userService.getById(source.authorId!!),
+            author = currentUserProvider.currentUser(),
             review = source.review!!,
             approved = false,
             approvalCount = 0

@@ -108,8 +108,8 @@ class CrudOperationCustomizerTest {
             Stream
                 .of(
                     PosController(mock<PosService>(), mock<PosDtoMapper>()),
-                    UserController(mock<UserService>(), mock<UserDtoMapper>()),
-                    ReviewController(mock<ReviewService>(), mock<ReviewDtoMapper>())
+                    UserController(mock<UserService>(), mock<UserDtoMapper>(), mock<de.seuhd.campuscoffee.api.security.CurrentUserProvider>()),
+                    ReviewController(mock<ReviewService>(), mock<ReviewDtoMapper>(), mock<de.seuhd.campuscoffee.api.security.CurrentUserProvider>())
                 ).flatMap { controller ->
                     controller.javaClass.declaredMethods
                         // skip the synthetic bridge methods the generic CrudController overrides generate;

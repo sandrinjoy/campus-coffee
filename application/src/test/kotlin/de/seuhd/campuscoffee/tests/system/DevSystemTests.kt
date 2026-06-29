@@ -4,6 +4,7 @@ import de.seuhd.campuscoffee.api.dtos.DevSummaryDto
 import de.seuhd.campuscoffee.tests.SystemTestUtils.client
 import de.seuhd.campuscoffee.tests.SystemTestUtils.posRequests
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
@@ -15,6 +16,11 @@ import org.springframework.test.web.servlet.client.returnResult
  */
 @ActiveProfiles("dev")
 class DevSystemTests : AbstractSystemTest() {
+    @BeforeEach
+    fun clearCredentialsForDevTests() {
+        de.seuhd.campuscoffee.tests.SystemTestUtils.testCredentials = null
+    }
+
     @Test
     fun `PUT replaces all data with the fixtures and is idempotent`() {
         val first =

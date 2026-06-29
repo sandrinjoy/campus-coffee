@@ -38,4 +38,7 @@ interface ReviewService : CrudService<Review, Long> {
         reviewId: Long,
         userId: Long
     ): Review
+
+    fun upsert(domainObject: Review, actingUser: de.seuhd.campuscoffee.domain.model.objects.User): Review
+    fun delete(id: Long, actingUser: de.seuhd.campuscoffee.domain.model.objects.User)
 }

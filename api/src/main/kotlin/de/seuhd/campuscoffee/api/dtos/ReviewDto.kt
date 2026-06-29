@@ -2,6 +2,7 @@ package de.seuhd.campuscoffee.api.dtos
 
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Null
 import jakarta.validation.constraints.Size
 import java.time.LocalDateTime
 
@@ -23,9 +24,7 @@ data class ReviewDto(
     val updatedAt: LocalDateTime? = null,
     @field:NotNull(message = "POS ID cannot be null.")
     val posId: Long?,
-    // TODO (Exercise 2): the author is the authenticated user, so authorId is read-only (server-set, shown
-    //  in responses); a POST/PUT that supplies an authorId must be rejected rather than trusted.
-    @field:NotNull(message = "Author ID cannot be null.")
+    @field:Null(message = "authorId must not be provided in the request")
     val authorId: Long?,
     @field:NotBlank(message = "Review text cannot be empty.")
     @field:Size(

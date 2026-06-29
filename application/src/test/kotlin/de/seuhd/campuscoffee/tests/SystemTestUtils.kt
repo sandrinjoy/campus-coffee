@@ -3,6 +3,7 @@ package de.seuhd.campuscoffee.tests
 import de.seuhd.campuscoffee.api.dtos.PosDto
 import de.seuhd.campuscoffee.api.dtos.ReviewDto
 import de.seuhd.campuscoffee.api.dtos.UserDto
+import de.seuhd.campuscoffee.domain.tests.TestFixtures
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration
 import org.springframework.http.HttpStatus
@@ -20,6 +21,27 @@ import java.lang.reflect.Array as ReflectArray
 object SystemTestUtils {
     /** Client bound to the running server for the current test; set via [configureClient]. */
     private lateinit var client: RestTestClient
+
+    var testCredentials: Pair<String, String>? = null
+
+    inline fun <R> withCredentials(username: String, secret: String, block: () -> R): R {
+        val old = testCredentials
+        testCredentials = username to secret
+        try {
+            return block()
+        } finally {
+            testCredentials = old
+        }
+    }
+
+    fun RestTestClient.RequestHeadersSpec<*>.withAuth(): RestTestClient.RequestHeadersSpec<*> {
+        val creds = testCredentials
+        return if (creds != null) {
+            this.headers { it.setBasicAuth(creds.first, creds.second) }
+        } else {
+            this
+        }
+    }
 
     /** Binds the shared [RestTestClient] to the running server on the given port. */
     fun configureClient(port: Int) {
@@ -148,6 +170,7 @@ object SystemTestUtils {
                     .get()
                     .uri(basePath)
                     .accept(MediaType.APPLICATION_JSON)
+                    .withAuth()
                     .exchange()
             )
 
@@ -157,6 +180,7 @@ object SystemTestUtils {
                     .get()
                     .uri("$basePath/{id}", id)
                     .accept(MediaType.APPLICATION_JSON)
+                    .withAuth()
                     .exchange(),
                 HttpStatus.OK
             )
@@ -170,6 +194,7 @@ object SystemTestUtils {
                     .get()
                     .uri("$basePath/filter?$filterParameter={value}", filterValue)
                     .accept(MediaType.APPLICATION_JSON)
+                    .withAuth()
                     .exchange(),
                 HttpStatus.OK
             )
@@ -184,6 +209,7 @@ object SystemTestUtils {
                     .get()
                     .uri("$basePath/filter?$filterParameter={value}", filterValue)
                     .accept(MediaType.APPLICATION_JSON)
+                    .withAuth()
                     .exchange()
             )
 
@@ -195,6 +221,7 @@ object SystemTestUtils {
                         .uri(basePath)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(dto)
+                        .withAuth()
                         .exchange(),
                     HttpStatus.CREATED
                 )
@@ -208,6 +235,7 @@ object SystemTestUtils {
                         .uri(basePath)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(dto)
+                        .withAuth()
                         .exchange()
                 )
             }
@@ -220,6 +248,7 @@ object SystemTestUtils {
                         .uri("$basePath/{id}", idGetter(dto))
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(dto)
+                        .withAuth()
                         .exchange(),
                     HttpStatus.OK
                 )
@@ -227,7 +256,7 @@ object SystemTestUtils {
 
         fun deleteAndReturnStatusCodes(idList: List<Long>): List<Int> =
             idList.map { id ->
-                status(client.delete().uri("$basePath/{id}", id).exchange())
+                status(client.delete().uri("$basePath/{id}", id).withAuth().exchange())
             }
 
         /** Filters by several query parameters, returning a list (the reviews filter returns many). */
@@ -240,6 +269,7 @@ object SystemTestUtils {
                         params.forEach { (key, value) -> uriBuilder.queryParam(key, value) }
                         uriBuilder.build()
                     }.accept(MediaType.APPLICATION_JSON)
+                    .withAuth()
                     .exchange()
             )
 
@@ -250,6 +280,7 @@ object SystemTestUtils {
                     .get()
                     .uri("$basePath/{id}", id)
                     .accept(MediaType.APPLICATION_JSON)
+                    .withAuth()
                     .exchange()
             )
 
@@ -264,6 +295,7 @@ object SystemTestUtils {
                     .uri("$basePath/{id}", pathId)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(dto)
+                    .withAuth()
                     .exchange()
             )
 
@@ -276,25 +308,35 @@ object SystemTestUtils {
                         .uri("$basePath/{id}", idGetter(dto))
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(dto)
+                        .withAuth()
                         .exchange()
                 )
             }
 
-        /** Approves an entity on behalf of a user via PUT /{id}/approve?user_id=... (reviews). */
+        /** Approves an entity on behalf of a user. */
         fun approve(
             id: Long,
-            userId: Long
-        ): T =
-            body(
-                client.put().uri("$basePath/{id}/approve?user_id={userId}", id, userId).exchange(),
-                HttpStatus.OK
-            )
+            loginName: String,
+            secret: String = "password123"
+        ): T {
+            return withCredentials(loginName, secret) {
+                body(
+                    client.put().uri("$basePath/{id}/approve", id).withAuth().exchange(),
+                    HttpStatus.OK
+                )
+            }
+        }
 
         /** Approves an entity and returns the raw status code (to assert a 400 self-approval or 404). */
         fun approveAndReturnStatusCode(
             id: Long,
-            userId: Long
-        ): Int = status(client.put().uri("$basePath/{id}/approve?user_id={userId}", id, userId).exchange())
+            loginName: String,
+            secret: String = "password123"
+        ): Int {
+            return withCredentials(loginName, secret) {
+                status(client.put().uri("$basePath/{id}/approve", id).withAuth().exchange())
+            }
+        }
     }
 
     val posRequests = Requests("/api/pos", PosDto::class.java) { it.id }
